@@ -1,0 +1,52 @@
+[package]
+authors = ["Sami J. Mäkinen <sjm@iki.fi>"]
+edition = "2021"
+readme = "README.md"
+name = "vumeter-usb"
+version = "0.1.0"
+
+[features]
+default = ["blue_pill"]
+blue_pill = ["stm32f1xx-hal"]
+
+[dependencies.stm32f1xx-hal]
+optional = true
+features = ["stm32f103", "rt", "stm32-usbd"]
+git = "https://github.com/stm32-rs/stm32f1xx-hal.git"
+
+
+[dependencies]
+cortex-m = "0"
+cortex-m-rt = "0"
+cortex-m-rtic = { git = "https://github.com/rtic-rs/cortex-m-rtic.git" }
+dwt-systick-monotonic = { git = "https://github.com/rtic-rs/dwt-systick-monotonic.git" }
+cortex-m-semihosting = "0"
+embedded-hal = "0"
+stm32-usbd = "0"
+usb-device = "0"
+usbd-serial = "0"
+# panic-halt = "0"
+panic-semihosting = "0"
+
+# nb = "1"
+# alloc-cortex-m = "0"
+
+# this lets you use `cargo fix`!
+[[bin]]
+name = "vumeter-usb"
+test = false
+bench = false
+
+# identical profiles haha
+
+[profile.release]
+opt-level = 'z'
+codegen-units = 1 # better optimizations
+debug = true      # symbols are nice and they don't increase the size on Flash
+lto = true        # better optimizations
+
+[profile.dev]
+opt-level = 'z'
+codegen-units = 1 # better optimizations
+debug = true      # symbols are nice and they don't increase the size on Flash
+lto = true        # better optimizations
