@@ -3,31 +3,30 @@
 #![no_std]
 #![no_main]
 #![allow(non_snake_case)]
-//#![deny(unsafe_code)]
+// #![deny(unsafe_code)]
 // #![deny(warnings)]
 
 use panic_semihosting as _;
-
-use stm32f1xx_hal::gpio::{ErasedPin, Output, PushPull};
 
 #[rtic::app(device = stm32f1xx_hal::pac, peripherals = true, dispatchers = [DMA1_CHANNEL1, DMA1_CHANNEL2, DMA1_CHANNEL3])]
 mod app {
 
     use cortex_m::asm;
-    use dwt_systick_monotonic::DwtSystick;
-    // use rtic::rtic_monotonic::Milliseconds;
+    use rtic::rtic_monotonic::Milliseconds;
     use stm32f1xx_hal::gpio::{ErasedPin, Output, PushPull};
     use stm32f1xx_hal::prelude::*;
     use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
+    use systick_monotonic::Systick;
     use usb_device::prelude::*;
 
     #[monotonic(binds=SysTick, default=true)]
-    type MyMono = DwtSystick<100>; // 100 Hz / 10 ms granularity
+    type MyMono = Systick<100>; // 100 Hz / 10 ms granularity
 
     #[shared]
     struct Shared {
         usb_dev: UsbDevice<'static, UsbBusType>,
         serial: usbd_serial::SerialPort<'static, UsbBusType>,
+        led_on: bool,
         led: ErasedPin<Output<PushPull>>,
     }
 
@@ -35,7 +34,7 @@ mod app {
     struct Local {}
 
     #[init]
-    fn init(mut cx: init::Context) -> (Shared, Local, init::Monotonics) {
+    fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
         static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<UsbBusType>> = None;
 
         let mut flash = cx.device.FLASH.constrain();
@@ -54,12 +53,7 @@ mod app {
 
         // Initialize the monotonic
         // #[cfg(feature = "nope")]
-        let mut mono = MyMono::new(
-            &mut cx.core.DCB,
-            cx.core.DWT,
-            cx.core.SYST,
-            clocks.sysclk().0,
-        );
+        let mono = MyMono::new(cx.core.SYST, clocks.sysclk().0);
         // mono.enable_timer();
 
         let mut gpioa = cx.device.GPIOA.split();
@@ -101,13 +95,14 @@ mod app {
         .device_class(usbd_serial::USB_CLASS_CDC)
         .build();
 
-        // led_on::spawn().ok();
+        seppo::spawn().ok();
 
         (
             Shared {
                 usb_dev,
                 serial,
                 led,
+                led_on: false,
             },
             Local {},
             init::Monotonics(mono),
@@ -123,70 +118,82 @@ mod app {
         }
     }
 
-    #[task(priority=1, capacity=2, shared=[led])]
+    #[task(priority=3, shared=[led_on, led])]
+    fn led_blink(cx: led_blink::Context) {
+        let mut led_on = cx.shared.led_on;
+        let mut led = cx.shared.led;
+
+        (&mut led, &mut led_on).lock(|led, led_on| {
+            if *led_on == false {
+                led.set_low();
+                *led_on = true;
+                led_off::spawn_after(Milliseconds(50u32)).ok();
+            }
+        });
+    }
+
+    #[task(priority=3, shared=[led_on, led])]
     fn led_off(cx: led_off::Context) {
         let mut led = cx.shared.led;
-        (&mut led).lock(|led| {
+        let mut led_on = cx.shared.led_on;
+        (&mut led, &mut led_on).lock(|led, led_on| {
             led.set_high();
+            *led_on = false;
         });
-        // led_on::spawn_after(Milliseconds(500u32)).ok();
     }
 
-    #[task(priority=1, capacity=2, shared=[led])]
-    fn led_on(cx: led_on::Context) {
-        let mut led = cx.shared.led;
-        (&mut led).lock(|led| {
-            led.set_low();
-        });
-        // led_off::spawn_after(Milliseconds(500u32)).ok();
-    }
-
-    #[task(priority=2, binds = USB_HP_CAN_TX, shared = [usb_dev, serial, led])]
+    #[task(priority=5, binds = USB_HP_CAN_TX, shared = [usb_dev, serial])]
     fn usb_tx(cx: usb_tx::Context) {
         let mut usb_dev = cx.shared.usb_dev;
         let mut serial = cx.shared.serial;
-        let mut led = cx.shared.led;
 
-        (&mut usb_dev, &mut serial, &mut led).lock(|usb_dev, serial, led| {
-            super::usb_poll(usb_dev, serial, led);
+        (&mut usb_dev, &mut serial).lock(|usb_dev, serial| {
+            usb_poll(usb_dev, serial);
         });
     }
 
-    #[task(priority=2, binds = USB_LP_CAN_RX0, shared = [usb_dev, serial, led])]
+    #[task(priority=5, binds = USB_LP_CAN_RX0, shared = [usb_dev, serial])]
     fn usb_rx0(cx: usb_rx0::Context) {
         let mut usb_dev = cx.shared.usb_dev;
         let mut serial = cx.shared.serial;
-        let mut led = cx.shared.led;
 
-        (&mut usb_dev, &mut serial, &mut led).lock(|usb_dev, serial, led| {
-            super::usb_poll(usb_dev, serial, led);
+        (&mut usb_dev, &mut serial).lock(|usb_dev, serial| {
+            usb_poll(usb_dev, serial);
         });
     }
-}
 
-fn usb_poll<B: usb_device::bus::UsbBus>(
-    usb_dev: &mut usb_device::prelude::UsbDevice<'static, B>,
-    serial: &mut usbd_serial::SerialPort<'static, B>,
-    led: &mut ErasedPin<Output<PushPull>>,
-) {
-    if !usb_dev.poll(&mut [serial]) {
-        return;
+    #[task(priority=1, shared = [serial])]
+    fn seppo(cx: seppo::Context) {
+        let mut serial = cx.shared.serial;
+        (&mut serial).lock(|serial| {
+            serial.write("Seppo!\n\r".as_ref()).ok();
+        });
+        seppo::spawn_after(Milliseconds(5000u32)).ok();
     }
 
-    let mut buf = [0u8; 8];
-
-    match serial.read(&mut buf) {
-        Ok(count) if count > 0 => {
-            led.toggle();
-            // Echo back in upper case
-            for c in buf[0..count].iter_mut() {
-                if 0x61 <= *c && *c <= 0x7a {
-                    *c &= !0x20;
-                }
-            }
-            serial.write(&buf[0..count]).ok();
+    fn usb_poll<B: usb_device::bus::UsbBus>(
+        usb_dev: &mut usb_device::prelude::UsbDevice<'static, B>,
+        serial: &mut usbd_serial::SerialPort<'static, B>,
+    ) {
+        if !usb_dev.poll(&mut [serial]) {
+            return;
         }
-        _ => {}
+
+        let mut buf = [0u8; 8];
+
+        match serial.read(&mut buf) {
+            Ok(count) if count > 0 => {
+                // Echo back in upper case
+                for c in buf[0..count].iter_mut() {
+                    if 0x61 <= *c && *c <= 0x7a {
+                        *c &= !0x20;
+                    }
+                }
+                serial.write(&buf[0..count]).ok();
+                led_blink::spawn().ok();
+            }
+            _ => {}
+        }
     }
 }
 // EOF

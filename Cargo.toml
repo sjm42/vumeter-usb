@@ -19,7 +19,8 @@ git = "https://github.com/stm32-rs/stm32f1xx-hal.git"
 cortex-m = "0"
 cortex-m-rt = "0"
 cortex-m-rtic = { git = "https://github.com/rtic-rs/cortex-m-rtic.git" }
-dwt-systick-monotonic = { git = "https://github.com/rtic-rs/dwt-systick-monotonic.git" }
+# dwt-systick-monotonic = { git = "https://github.com/rtic-rs/dwt-systick-monotonic.git" }
+systick-monotonic = { git = "https://github.com/rtic-rs/systick-monotonic.git" }
 cortex-m-semihosting = "0"
 embedded-hal = "0"
 stm32-usbd = "0"
