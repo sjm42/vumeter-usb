@@ -7,7 +7,7 @@ usage()
     exit 1
 }
 
-case "12" in
+case "$1" in
 b*)
     feat="blue_pill"
     tgt="thumbv7m-none-eabi"
