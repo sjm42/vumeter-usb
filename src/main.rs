@@ -3,14 +3,12 @@
 #![no_std]
 #![no_main]
 #![allow(non_snake_case)]
-// #![deny(unsafe_code)]
 // #![deny(warnings)]
 
 use panic_semihosting as _;
 
 #[rtic::app(device = stm32f1xx_hal::pac, peripherals = true, dispatchers = [DMA1_CHANNEL1, DMA1_CHANNEL2, DMA1_CHANNEL3])]
 mod app {
-
     use cortex_m::asm;
     use rtic::rtic_monotonic::Milliseconds;
     use stm32f1xx_hal::gpio::{ErasedPin, Output, PushPull};
@@ -22,12 +20,35 @@ mod app {
     #[monotonic(binds=SysTick, default=true)]
     type MyMono = Systick<100>; // 100 Hz / 10 ms granularity
 
+    #[derive(Copy, Clone, Debug, PartialEq)]
+    #[repr(u8)]
+    pub enum Cmd {
+        None = 0x00,
+        Set1 = 0x31,
+        Set2,
+        Set3,
+        Set4,
+    }
+
+    #[derive(Copy, Clone, Debug, PartialEq)]
+    #[repr(u8)]
+    pub enum CmdState {
+        Start1 = 0xFE,
+        Start2 = 0x01,
+        Cmd,
+        Data,
+        Pending,
+    }
+
     #[shared]
     struct Shared {
         usb_dev: UsbDevice<'static, UsbBusType>,
         serial: usbd_serial::SerialPort<'static, UsbBusType>,
         led_on: bool,
         led: ErasedPin<Output<PushPull>>,
+        state: CmdState,
+        cmd: Cmd,
+        data: u8,
     }
 
     #[local]
@@ -95,14 +116,15 @@ mod app {
         .device_class(usbd_serial::USB_CLASS_CDC)
         .build();
 
-        seppo::spawn().ok();
-
         (
             Shared {
                 usb_dev,
                 serial,
                 led,
                 led_on: false,
+                state: CmdState::Start1,
+                cmd: Cmd::None,
+                data: 0,
             },
             Local {},
             init::Monotonics(mono),
@@ -118,7 +140,7 @@ mod app {
         }
     }
 
-    #[task(priority=3, shared=[led_on, led])]
+    #[task(priority=2, shared=[led_on, led])]
     fn led_blink(cx: led_blink::Context) {
         let mut led_on = cx.shared.led_on;
         let mut led = cx.shared.led;
@@ -132,7 +154,7 @@ mod app {
         });
     }
 
-    #[task(priority=3, shared=[led_on, led])]
+    #[task(priority=2, shared=[led_on, led])]
     fn led_off(cx: led_off::Context) {
         let mut led = cx.shared.led;
         let mut led_on = cx.shared.led_on;
@@ -142,58 +164,112 @@ mod app {
         });
     }
 
-    #[task(priority=5, binds = USB_HP_CAN_TX, shared = [usb_dev, serial])]
+    #[task(priority=5, binds = USB_HP_CAN_TX, shared = [usb_dev, serial, state, cmd, data])]
     fn usb_tx(cx: usb_tx::Context) {
         let mut usb_dev = cx.shared.usb_dev;
         let mut serial = cx.shared.serial;
-
-        (&mut usb_dev, &mut serial).lock(|usb_dev, serial| {
-            usb_poll(usb_dev, serial);
-        });
+        let mut state = cx.shared.state;
+        let mut cmd = cx.shared.cmd;
+        let mut data = cx.shared.data;
+        (&mut usb_dev, &mut serial, &mut state, &mut cmd, &mut data).lock(
+            |usb_dev, serial, state, cmd, data| {
+                usb_poll(usb_dev, serial, state, cmd, data);
+            },
+        );
     }
 
-    #[task(priority=5, binds = USB_LP_CAN_RX0, shared = [usb_dev, serial])]
+    #[task(priority=5, binds = USB_LP_CAN_RX0, shared = [usb_dev, serial, state, cmd, data])]
     fn usb_rx0(cx: usb_rx0::Context) {
         let mut usb_dev = cx.shared.usb_dev;
         let mut serial = cx.shared.serial;
+        let mut state = cx.shared.state;
+        let mut cmd = cx.shared.cmd;
+        let mut data = cx.shared.data;
 
-        (&mut usb_dev, &mut serial).lock(|usb_dev, serial| {
-            usb_poll(usb_dev, serial);
-        });
-    }
-
-    #[task(priority=1, shared = [serial])]
-    fn seppo(cx: seppo::Context) {
-        let mut serial = cx.shared.serial;
-        (&mut serial).lock(|serial| {
-            serial.write("Seppo!\n\r".as_ref()).ok();
-        });
-        seppo::spawn_after(Milliseconds(5000u32)).ok();
+        (&mut usb_dev, &mut serial, &mut state, &mut cmd, &mut data).lock(
+            |usb_dev, serial, state, cmd, data| {
+                usb_poll(usb_dev, serial, state, cmd, data);
+            },
+        );
     }
 
     fn usb_poll<B: usb_device::bus::UsbBus>(
         usb_dev: &mut usb_device::prelude::UsbDevice<'static, B>,
         serial: &mut usbd_serial::SerialPort<'static, B>,
+        state: &mut CmdState,
+        cmd: &mut Cmd,
+        data: &mut u8,
     ) {
         if !usb_dev.poll(&mut [serial]) {
             return;
         }
 
-        let mut buf = [0u8; 8];
-
+        let mut buf = [0u8; 32];
         match serial.read(&mut buf) {
             Ok(count) if count > 0 => {
-                // Echo back in upper case
                 for c in buf[0..count].iter_mut() {
-                    if 0x61 <= *c && *c <= 0x7a {
-                        *c &= !0x20;
+                    match *state {
+                        CmdState::Start1 => {
+                            if *c == CmdState::Start1 as u8 {
+                                *state = CmdState::Start2;
+                            }
+                        }
+                        CmdState::Start2 => {
+                            if *c == CmdState::Start2 as u8 {
+                                *state = CmdState::Cmd;
+                            } else {
+                                *state = CmdState::Start1;
+                            }
+                        }
+                        CmdState::Cmd => {
+                            led_blink::spawn().ok();
+                            *state = CmdState::Data;
+                            // We cannot use TryInto trait here since we are no_std, sigh
+                            match *c {
+                                0x31 => *cmd = Cmd::Set1,
+                                0x32 => *cmd = Cmd::Set2,
+                                0x33 => *cmd = Cmd::Set3,
+                                0x34 => *cmd = Cmd::Set4,
+                                _ => {
+                                    // Unknown Cmd
+                                    *state = CmdState::Start1;
+                                    *cmd = Cmd::None;
+                                }
+                            }
+                        }
+                        CmdState::Data => {
+                            *state = CmdState::Pending;
+                            *data = *c;
+                            do_cmd::spawn().ok();
+                        }
+                        CmdState::Pending => {
+                            // Well as long as we havethe command pending,
+                            // we have to throw away incoming serial data
+                        }
                     }
                 }
-                serial.write(&buf[0..count]).ok();
-                led_blink::spawn().ok();
             }
             _ => {}
         }
+    }
+
+    #[task(priority=3, shared=[cmd, data, state])]
+    fn do_cmd(cx: do_cmd::Context) {
+        let mut cmd = cx.shared.cmd;
+        let mut data = cx.shared.data;
+        let mut state = cx.shared.state;
+
+        (&mut cmd, &mut data, &mut state).lock(|cmd, data, state| {
+            if *state == CmdState::Pending {
+                // act on the command here
+
+                *state = CmdState::Start1;
+                *cmd = Cmd::None;
+                *data = 0;
+            }
+        });
+
+        // led_blink::spawn().ok();
     }
 }
 // EOF
