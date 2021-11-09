@@ -21,7 +21,7 @@ mod app {
     use stm32f1xx_hal::{pac::TIM2, pwm::*};
 
     #[monotonic(binds=SysTick, default=true)]
-    type MyMono = Systick<100>; // 1000 Hz / 1 ms granularity
+    type MyMono = Systick<1000>; // 1000 Hz / 1 ms granularity
 
     #[derive(Copy, Clone, Debug, PartialEq)]
     #[repr(u8)]
@@ -198,7 +198,7 @@ mod app {
         }
     }
 
-    #[task(priority=2, shared=[led_on, led])]
+    #[task(priority=2, capacity=2, shared=[led_on, led])]
     fn led_blink(cx: led_blink::Context) {
         let mut led_on = cx.shared.led_on;
         let mut led = cx.shared.led;
@@ -207,7 +207,7 @@ mod app {
             if !(*led_on) {
                 led.set_low();
                 *led_on = true;
-                led_off::spawn_after(20.millis()).ok();
+                led_off::spawn_after(10.millis()).ok();
             }
         });
     }
