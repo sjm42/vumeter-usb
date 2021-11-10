@@ -3,7 +3,7 @@ set -e
 
 usage()
 {
-    echo "Usage: $0 <build | clippy | flash>  <bluepill | nucleo_f411>"
+    echo "Usage: $0 <bluepill | nucleo_f411> <build | clippy | flash>"
     exit 1
 }
 

@@ -3,22 +3,22 @@
 #![no_std]
 #![no_main]
 #![allow(non_snake_case)]
-// #![deny(warnings)]
+#![deny(warnings)]
 
 use panic_semihosting as _;
 
 #[rtic::app(device = stm32f1xx_hal::pac, peripherals = true, dispatchers = [DMA1_CHANNEL1, DMA1_CHANNEL2, DMA1_CHANNEL3])]
 mod app {
     use cortex_m::asm;
-    // use rtic::rtic_monotonic::Milliseconds;
-    use stm32f1xx_hal::prelude::*;
     use systick_monotonic::*;
     use usb_device::prelude::*;
 
     use stm32f1xx_hal::gpio::{ErasedPin, Output, PushPull};
     use stm32f1xx_hal::timer::{Tim2NoRemap, Timer};
     use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
-    use stm32f1xx_hal::{pac::TIM2, pwm::*};
+    use stm32f1xx_hal::{pac::TIM2, pwm::*, watchdog::IndependentWatchdog};
+
+    use stm32f1xx_hal::prelude::*;
 
     #[monotonic(binds=SysTick, default=true)]
     type MyMono = Systick<1000>; // 1000 Hz / 1 ms granularity
@@ -40,7 +40,6 @@ mod app {
         Start2 = 0x02,
         Cmd,
         Data,
-        Pending,
     }
 
     #[derive(Copy, Clone, Debug, PartialEq)]
@@ -59,12 +58,13 @@ mod app {
         led: ErasedPin<Output<PushPull>>,
         state: CmdState,
         cmd: Cmd,
-        data: u8,
-        hello_state: HelloState,
+        busy: ErasedPin<Output<PushPull>>,
     }
 
     #[local]
     struct Local {
+        watchdog: IndependentWatchdog,
+        hello_state: HelloState,
         i: u8,
         pwm_max: u16,
         pwm1: PwmChannel<TIM2, C1>,
@@ -95,8 +95,16 @@ mod app {
         let mono = Systick::new(cx.core.SYST, clocks.sysclk().0);
 
         let mut gpioa = cx.device.GPIOA.split();
+        let mut gpiob = cx.device.GPIOB.split();
         let mut gpioc = cx.device.GPIOC.split();
         let mut afio = cx.device.AFIO.constrain();
+
+        let mut busy = gpiob.pb15.into_push_pull_output(&mut gpiob.crh).erase();
+        busy.set_high();
+
+        // On blue pill stm32f103 user led is on PC13, active low
+        let mut led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh).erase();
+        led.set_high();
 
         // Initialize PWM output pins
         let pins = (
@@ -125,10 +133,6 @@ mod app {
         pwm2.set_duty(0);
         pwm3.set_duty(0);
         pwm4.set_duty(0);
-
-        // On blue pill stm32f103 user led is on PC13, active low
-        let mut led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh).erase();
-        led.set_high();
 
         // *** Begin USB setup ***
 
@@ -159,12 +163,20 @@ mod app {
             UsbVidPid(0x16c0, 0x27dd),
         )
         .manufacturer("Siuro Hacklab")
-        .product("Serial VU meter")
-        .serial_number("4242")
+        .product("Mystery Gadget")
+        .serial_number("1234")
         .device_class(usbd_serial::USB_CLASS_CDC)
         .build();
 
+        // Set "busy" pin up each 100ms, feed the watchdog
+        periodic::spawn().ok();
+
+        // Signal hello with pwm
         hello::spawn_after(1000.millis()).ok();
+
+        // Start the hardware watchdog
+        let mut watchdog = IndependentWatchdog::new(cx.device.IWDG);
+        watchdog.start(500.ms());
 
         (
             Shared {
@@ -174,10 +186,11 @@ mod app {
                 led_on: false,
                 state: CmdState::Start1,
                 cmd: Cmd::None,
-                data: 0,
-                hello_state: HelloState::GoUp,
+                busy,
             },
             Local {
+                watchdog,
+                hello_state: HelloState::GoUp,
                 pwm_max,
                 pwm1,
                 pwm2,
@@ -190,16 +203,31 @@ mod app {
     }
 
     // Background task, runs whenever no other tasks are running
-    #[idle]
-    fn idle(_: idle::Context) -> ! {
+    #[idle(shared=[busy])]
+    fn idle(cx: idle::Context) -> ! {
+        let mut busy = cx.shared.busy;
         loop {
-            // could be busyloop as well
+            (&mut busy).lock(|busy| busy.set_low());
+            // Wait for interrupt...
             asm::wfi();
         }
     }
 
-    #[task(priority=2, capacity=2, shared=[led_on, led])]
-    fn led_blink(cx: led_blink::Context) {
+    // Create pulses on "busy" pin each 100 milliseconds even when nothing else is active
+    // and feed the watchdog to avoid hardware reset.
+    #[task(priority=1, shared=[busy], local=[watchdog])]
+    fn periodic(cx: periodic::Context) {
+        let mut busy = cx.shared.busy;
+        (&mut busy).lock(|busy| busy.set_high());
+        cx.local.watchdog.feed();
+        periodic::spawn_after(100.millis()).ok();
+    }
+
+    #[task(priority=2, capacity=2, shared=[busy, led_on, led])]
+    fn led_blink(cx: led_blink::Context, ms: u64) {
+        let mut busy = cx.shared.busy;
+        (&mut busy).lock(|busy| busy.set_high());
+
         let mut led_on = cx.shared.led_on;
         let mut led = cx.shared.led;
 
@@ -207,13 +235,16 @@ mod app {
             if !(*led_on) {
                 led.set_low();
                 *led_on = true;
-                led_off::spawn_after(10.millis()).ok();
+                led_off::spawn_after(ms.millis()).ok();
             }
         });
     }
 
-    #[task(priority=2, shared=[led_on, led])]
+    #[task(priority=2, shared=[busy, led_on, led])]
     fn led_off(cx: led_off::Context) {
+        let mut busy = cx.shared.busy;
+        (&mut busy).lock(|busy| busy.set_high());
+
         let mut led = cx.shared.led;
         let mut led_on = cx.shared.led_on;
         (&mut led, &mut led_on).lock(|led, led_on| {
@@ -222,33 +253,34 @@ mod app {
         });
     }
 
-    #[task(priority=5, binds = USB_HP_CAN_TX, shared = [usb_dev, serial, state, cmd, data])]
+    #[task(priority=5, binds=USB_HP_CAN_TX, shared=[busy, usb_dev, serial, state, cmd])]
     fn usb_tx(cx: usb_tx::Context) {
+        let mut busy = cx.shared.busy;
+        (&mut busy).lock(|busy| busy.set_high());
+
         let mut usb_dev = cx.shared.usb_dev;
         let mut serial = cx.shared.serial;
         let mut state = cx.shared.state;
         let mut cmd = cx.shared.cmd;
-        let mut data = cx.shared.data;
-        (&mut usb_dev, &mut serial, &mut state, &mut cmd, &mut data).lock(
-            |usb_dev, serial, state, cmd, data| {
-                usb_poll(usb_dev, serial, state, cmd, data);
-            },
-        );
+
+        (&mut usb_dev, &mut serial, &mut state, &mut cmd).lock(|usb_dev, serial, state, cmd| {
+            usb_poll(usb_dev, serial, state, cmd);
+        });
     }
 
-    #[task(priority=5, binds = USB_LP_CAN_RX0, shared = [usb_dev, serial, state, cmd, data])]
+    #[task(priority=5, binds=USB_LP_CAN_RX0, shared=[busy, usb_dev, serial, state, cmd])]
     fn usb_rx0(cx: usb_rx0::Context) {
+        let mut busy = cx.shared.busy;
+        (&mut busy).lock(|busy| busy.set_high());
+
         let mut usb_dev = cx.shared.usb_dev;
         let mut serial = cx.shared.serial;
         let mut state = cx.shared.state;
         let mut cmd = cx.shared.cmd;
-        let mut data = cx.shared.data;
 
-        (&mut usb_dev, &mut serial, &mut state, &mut cmd, &mut data).lock(
-            |usb_dev, serial, state, cmd, data| {
-                usb_poll(usb_dev, serial, state, cmd, data);
-            },
-        );
+        (&mut usb_dev, &mut serial, &mut state, &mut cmd).lock(|usb_dev, serial, state, cmd| {
+            usb_poll(usb_dev, serial, state, cmd);
+        });
     }
 
     fn usb_poll<B: usb_device::bus::UsbBus>(
@@ -256,7 +288,6 @@ mod app {
         serial: &mut usbd_serial::SerialPort<'static, B>,
         state: &mut CmdState,
         cmd: &mut Cmd,
-        data: &mut u8,
     ) {
         if !usb_dev.poll(&mut [serial]) {
             return;
@@ -297,123 +328,77 @@ mod app {
                         }
                     }
                     CmdState::Data => {
-                        *state = CmdState::Pending;
-                        *data = *c;
-                        set_pwm::spawn().ok();
-                    }
-                    CmdState::Pending => {
-                        // Well as long as we have the command pending,
-                        // we have to throw away incoming serial data
+                        // higher priority will execute immediately
+                        set_pwm::spawn(*cmd, *c).ok();
+                        *state = CmdState::Start1;
                     }
                 }
             }
         }
     }
 
-    #[task(priority=3, shared=[cmd, data, state], local=[pwm_max, pwm1, pwm2, pwm3, pwm4])]
-    fn set_pwm(cx: set_pwm::Context) {
-        let mut cmd = cx.shared.cmd;
-        let mut data = cx.shared.data;
-        let mut state = cx.shared.state;
+    #[task(priority=7, shared=[busy], local=[pwm_max, pwm1, pwm2, pwm3, pwm4])]
+    fn set_pwm(cx: set_pwm::Context, ch: Cmd, da: u8) {
+        let mut busy = cx.shared.busy;
+        (&mut busy).lock(|busy| busy.set_high());
 
-        let pwm_max = cx.local.pwm_max;
-        let pwm1 = cx.local.pwm1;
-        let pwm2 = cx.local.pwm2;
-        let pwm3 = cx.local.pwm3;
-        let pwm4 = cx.local.pwm4;
+        let mut d = ((da as u32 * *cx.local.pwm_max as u32) / 256u32) as u16;
+        if d < 1 {
+            // do not shut down pwm output completely
+            d = 1;
+        }
 
-        (&mut cmd, &mut data, &mut state).lock(|cmd, data, state| {
-            if *state == CmdState::Pending {
-                // act on the command here
-                match *cmd {
-                    Cmd::Set1 => {
-                        pwm1.set_duty(((*data as u32 * *pwm_max as u32) / 256u32) as u16);
-                    }
-                    Cmd::Set2 => {
-                        pwm2.set_duty(((*data as u32 * *pwm_max as u32) / 256u32) as u16);
-                    }
-                    Cmd::Set3 => {
-                        pwm3.set_duty(((*data as u32 * *pwm_max as u32) / 256u32) as u16);
-                    }
-                    Cmd::Set4 => {
-                        pwm4.set_duty(((*data as u32 * *pwm_max as u32) / 256u32) as u16);
-                    }
-                    _ => {}
-                }
-                *cmd = Cmd::None;
-                *state = CmdState::Start1;
-                *data = 0;
-            }
-        });
-        led_blink::spawn().ok();
+        match ch {
+            Cmd::Set1 => cx.local.pwm1.set_duty(d),
+            Cmd::Set2 => cx.local.pwm2.set_duty(d),
+            Cmd::Set3 => cx.local.pwm3.set_duty(d),
+            Cmd::Set4 => cx.local.pwm4.set_duty(d),
+            _ => {}
+        }
+        led_blink::spawn(10).ok();
     }
 
-    #[task(priority=1, shared=[cmd, data, state, hello_state], local=[i])]
+    #[task(priority=1, shared=[busy], local=[hello_state, i])]
     fn hello(cx: hello::Context) {
-        let mut cmd = cx.shared.cmd;
-        let mut data = cx.shared.data;
-        let mut state = cx.shared.state;
-        let mut hello_state = cx.shared.hello_state;
+        let mut busy = cx.shared.busy;
+        (&mut busy).lock(|busy| busy.set_high());
+
+        let hello_state = cx.local.hello_state;
         let i = cx.local.i;
 
-        (&mut hello_state).lock(|hello_state| {
-            if let HelloState::Idle = hello_state {
-                return;
-            }
-            match hello_state {
-                HelloState::GoUp => {
-                    if *i < 255 {
-                        *i += 1;
-                    } else {
-                        *hello_state = HelloState::GoDown;
-                    }
+        if let HelloState::Idle = hello_state {
+            return;
+        }
+        match hello_state {
+            HelloState::GoUp => {
+                if *i < 255 {
+                    *i += 1;
+                } else {
+                    *hello_state = HelloState::GoDown;
                 }
-                HelloState::GoDown => {
-                    if *i > 0 {
-                        *i -= 1;
-                    } else {
-                        *hello_state = HelloState::Idle;
-                    }
+            }
+            HelloState::GoDown => {
+                if *i > 0 {
+                    *i -= 1;
+                } else {
+                    *hello_state = HelloState::Idle;
                 }
-                _ => (),
             }
+            _ => (),
+        }
 
-            // Note: all do_cmd calls will block (preempt, execute immediately)
-            //  because the task has higher priority.
-            // This is by design and exactly what we want here.
+        // Note: all do_cmd calls will block (preempt, execute immediately)
+        //  because the task has higher priority.
+        // This is by design and exactly what we want here.
 
-            (&mut state, &mut cmd, &mut data).lock(|state, cmd, data| {
-                *state = CmdState::Pending;
-                *cmd = Cmd::Set1;
-                *data = *i;
-            });
-            set_pwm::spawn().ok();
+        set_pwm::spawn(Cmd::Set1, *i).ok();
+        set_pwm::spawn(Cmd::Set2, *i).ok();
+        set_pwm::spawn(Cmd::Set3, *i).ok();
+        set_pwm::spawn(Cmd::Set4, *i).ok();
 
-            (&mut state, &mut cmd, &mut data).lock(|state, cmd, data| {
-                *state = CmdState::Pending;
-                *cmd = Cmd::Set2;
-                *data = *i;
-            });
-            set_pwm::spawn().ok();
-
-            (&mut state, &mut cmd, &mut data).lock(|state, cmd, data| {
-                *state = CmdState::Pending;
-                *cmd = Cmd::Set3;
-                *data = *i;
-            });
-            set_pwm::spawn().ok();
-
-            (&mut state, &mut cmd, &mut data).lock(|state, cmd, data| {
-                *state = CmdState::Pending;
-                *cmd = Cmd::Set4;
-                *data = *i;
-            });
-            set_pwm::spawn().ok();
-
-            if *hello_state != HelloState::Idle {
-                hello::spawn_after(5.millis()).ok();
-            }
-        });
+        if *hello_state != HelloState::Idle {
+            hello::spawn_after(5.millis()).ok();
+        }
     }
 }
 // EOF
