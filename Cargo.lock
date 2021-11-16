@@ -496,7 +496,7 @@ dependencies = [
 [[package]]
 name = "stm32f1xx-hal"
 version = "0.7.0"
-source = "git+https://github.com/stm32-rs/stm32f1xx-hal.git#f101160e07fa45bc5383588716e421272e1c6a6e"
+source = "git+https://github.com/stm32-rs/stm32f1xx-hal.git#127ab1407d5c9f1869a1ac8f7411c5184ea8296a"
 dependencies = [
  "bxcan",
  "cast",
