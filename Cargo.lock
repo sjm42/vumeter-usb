@@ -228,9 +228,9 @@ dependencies = [
 
 [[package]]
 name = "fugit"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a100ebf2aadd97481fce0b1265ea470460578ac5441fd9d624e8170753f51a9f"
+checksum = "502346b6ea97b6a5f3ec5aa0399ac6411d34e4eb663a3980dd4bab50b9e33734"
 
 [[package]]
 name = "hash32"
