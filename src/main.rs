@@ -21,7 +21,7 @@ mod app {
     use stm32f1xx_hal::prelude::*;
 
     #[monotonic(binds=SysTick, default=true)]
-    type MyMono = Systick<1000>; // 1000 Hz / 1 ms granularity
+    type MyMono = Systick<10_000>; // 10 kHz / 100 µs granularity
 
     #[derive(Copy, Clone, Debug, PartialEq)]
     #[repr(u8)]
@@ -163,8 +163,8 @@ mod app {
             UsbVidPid(0x16c0, 0x27dd),
         )
         .manufacturer("Siuro Hacklab")
-        .product("Mystery Gadget")
-        .serial_number("1234")
+        .product("VU meter")
+        .serial_number("vu42")
         .device_class(usbd_serial::USB_CLASS_CDC)
         .build();
 
