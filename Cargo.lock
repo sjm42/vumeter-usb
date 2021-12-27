@@ -126,7 +126,7 @@ dependencies = [
 [[package]]
 name = "cortex-m-rtic"
 version = "1.0.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#5a4bcae1fb5c4cac7201e1f1a2bc131ca68d3952"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#f9902681474a8d203a5ba4209d788c30b27f5db5"
 dependencies = [
  "bare-metal 1.0.0",
  "cortex-m",
@@ -140,7 +140,7 @@ dependencies = [
 [[package]]
 name = "cortex-m-rtic-macros"
 version = "1.0.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#5a4bcae1fb5c4cac7201e1f1a2bc131ca68d3952"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#f9902681474a8d203a5ba4209d788c30b27f5db5"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -359,9 +359,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.34"
+version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f84e92c0f7c9d58328b85a78557813e4bd845130db68d7184635344399423b1"
+checksum = "392a54546fda6b7cc663379d0e6ce8b324cf88aecc5a499838e1be9781bdce2e"
 dependencies = [
  "unicode-xid",
 ]
@@ -542,7 +542,7 @@ dependencies = [
 [[package]]
 name = "systick-monotonic"
 version = "1.0.0"
-source = "git+https://github.com/rtic-rs/systick-monotonic.git#5483aa898765a422a0d2bd5689d2ba3bbd59eb1f"
+source = "git+https://github.com/rtic-rs/systick-monotonic.git#5fde42cb88a1b4111893f5032b822bfccc135963"
 dependencies = [
  "cortex-m",
  "fugit",
