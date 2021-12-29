@@ -62,13 +62,11 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bxcan"
-version = "0.5.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76ebc678b8ec2b87e3c3a77a1c4449006dd079e40d66fe0758f2d41a3b561fff"
+checksum = "4b13b4b2ea9ab2ba924063ebb86ad895cb79f4a79bf90f27949eb20c335b30f9"
 dependencies = [
  "bitflags",
- "defmt",
- "embedded-can",
  "nb 1.0.0",
  "vcell",
 ]
@@ -168,43 +166,6 @@ dependencies = [
  "cfg-if",
  "cortex-m",
  "riscv",
-]
-
-[[package]]
-name = "defmt"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15fe96f5d208164afa70583ff8f062e7697cbbb0b98e5076fbf8ac6da9edff0f"
-dependencies = [
- "defmt-macros",
- "semver 1.0.4",
-]
-
-[[package]]
-name = "defmt-macros"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bd2c3949cb76c25f48c363e61b97f05b317efe3c12fa45d54a6599c3949c85e"
-dependencies = [
- "defmt-parser",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "defmt-parser"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc621c2b4f5f5635e34021c38af2ccb0c1dae38ba11ebee25258de8bb1cee9fe"
-
-[[package]]
-name = "embedded-can"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12719661dce6080d174aa0a9df1f61756022dc105c1761bcd37091a0ee5de635"
-dependencies = [
- "nb 1.0.0",
 ]
 
 [[package]]
@@ -443,7 +404,7 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 dependencies = [
- "semver 0.9.0",
+ "semver",
 ]
 
 [[package]]
@@ -460,12 +421,6 @@ checksum = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 dependencies = [
  "semver-parser",
 ]
-
-[[package]]
-name = "semver"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "568a8e6258aa33c13358f81fd834adb854c6f7c9468520910a9b1e8fac068012"
 
 [[package]]
 name = "semver-parser"
@@ -513,8 +468,8 @@ dependencies = [
 
 [[package]]
 name = "stm32f1xx-hal"
-version = "0.7.0"
-source = "git+https://github.com/stm32-rs/stm32f1xx-hal.git#e790b27663c03362b7dfac924f55b02d00869c08"
+version = "0.8.0"
+source = "git+https://github.com/stm32-rs/stm32f1xx-hal.git#c62c997ab755b2d4697cdf40762a8fa6341e92ed"
 dependencies = [
  "bxcan",
  "cast",
