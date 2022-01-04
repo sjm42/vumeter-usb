@@ -124,7 +124,7 @@ dependencies = [
 [[package]]
 name = "cortex-m-rtic"
 version = "1.0.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#f9902681474a8d203a5ba4209d788c30b27f5db5"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#8cff6827d147d46760095f63a4d84e9ca9727672"
 dependencies = [
  "bare-metal 1.0.0",
  "cortex-m",
@@ -138,7 +138,7 @@ dependencies = [
 [[package]]
 name = "cortex-m-rtic-macros"
 version = "1.0.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#f9902681474a8d203a5ba4209d788c30b27f5db5"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#8cff6827d147d46760095f63a4d84e9ca9727672"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -497,7 +497,7 @@ dependencies = [
 [[package]]
 name = "systick-monotonic"
 version = "1.0.0"
-source = "git+https://github.com/rtic-rs/systick-monotonic.git#5fde42cb88a1b4111893f5032b822bfccc135963"
+source = "git+https://github.com/rtic-rs/systick-monotonic.git#f0baf434eec7630768b0a12208d38c08b2ce9a73"
 dependencies = [
  "cortex-m",
  "fugit",
