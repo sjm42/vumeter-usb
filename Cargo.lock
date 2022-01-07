@@ -124,7 +124,7 @@ dependencies = [
 [[package]]
 name = "cortex-m-rtic"
 version = "1.0.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#dcba1a55ddf27995da61253ec79f8c915bb3da38"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#2c921ac67c2e16f8d473a5825c7e29c681753f92"
 dependencies = [
  "bare-metal 1.0.0",
  "cortex-m",
@@ -138,7 +138,7 @@ dependencies = [
 [[package]]
 name = "cortex-m-rtic-macros"
 version = "1.0.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#dcba1a55ddf27995da61253ec79f8c915bb3da38"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#2c921ac67c2e16f8d473a5825c7e29c681753f92"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -485,9 +485,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.84"
+version = "1.0.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecb2e6da8ee5eb9a61068762a32fa9619cc591ceb055b3687f4cd4051ec2e06b"
+checksum = "a684ac3dcd8913827e18cd09a68384ee66c1de24157e3c556c9ab16d85695fb7"
 dependencies = [
  "proc-macro2",
  "quote",
