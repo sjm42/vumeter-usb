@@ -469,7 +469,7 @@ dependencies = [
 [[package]]
 name = "stm32f1xx-hal"
 version = "0.8.0"
-source = "git+https://github.com/stm32-rs/stm32f1xx-hal.git#ecd81e0821682669592e7cee07c7ce7e1ce31509"
+source = "git+https://github.com/stm32-rs/stm32f1xx-hal.git#9876d1939a0066d41181af6b7d553dd654b5d1c5"
 dependencies = [
  "bxcan",
  "cast",
@@ -477,6 +477,7 @@ dependencies = [
  "cortex-m-rt",
  "embedded-dma",
  "embedded-hal",
+ "fugit",
  "nb 1.0.0",
  "stm32-usbd",
  "stm32f1",
