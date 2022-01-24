@@ -124,7 +124,7 @@ dependencies = [
 [[package]]
 name = "cortex-m-rtic"
 version = "1.0.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#69cacd05974b72d1eed7e291cc758d443e23939b"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#c3c75f2200ebc32ca35403c528914baa8e025bed"
 dependencies = [
  "bare-metal 1.0.0",
  "cortex-m",
@@ -138,7 +138,7 @@ dependencies = [
 [[package]]
 name = "cortex-m-rtic-macros"
 version = "1.0.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#69cacd05974b72d1eed7e291cc758d443e23939b"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#c3c75f2200ebc32ca35403c528914baa8e025bed"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
