@@ -78,12 +78,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
-name = "cast"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
-
-[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -469,10 +463,9 @@ dependencies = [
 [[package]]
 name = "stm32f1xx-hal"
 version = "0.8.0"
-source = "git+https://github.com/stm32-rs/stm32f1xx-hal.git#ab33c09bab307edbdc23ea58f7c73ec76507a18e"
+source = "git+https://github.com/stm32-rs/stm32f1xx-hal.git#214b426cb94e2f4217aa4601d301a739801d90a8"
 dependencies = [
  "bxcan",
- "cast",
  "cortex-m",
  "cortex-m-rt",
  "embedded-dma",
