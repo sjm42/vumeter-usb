@@ -3,7 +3,7 @@
 #![no_std]
 #![no_main]
 #![allow(non_snake_case)]
-#![deny(warnings)]
+// #![deny(warnings)]
 
 use panic_semihosting as _;
 
@@ -13,12 +13,12 @@ mod app {
     use systick_monotonic::*;
     use usb_device::prelude::*;
 
-    use stm32f1xx_hal::gpio::{ErasedPin, Output, PushPull};
-    use stm32f1xx_hal::timer::{Tim2NoRemap, Timer};
-    use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
-    use stm32f1xx_hal::{pac::TIM2, pwm::*, watchdog::IndependentWatchdog};
+    use stm32f1xx_hal as hal;
 
-    use stm32f1xx_hal::prelude::*;
+    use hal::timer::{Tim2NoRemap, Timer};
+    use hal::usb::{Peripheral, UsbBus, UsbBusType};
+    use hal::{gpio::*, pac, prelude::*};
+    use hal::{pwm::*, watchdog::IndependentWatchdog};
 
     #[monotonic(binds=SysTick, default=true)]
     type MyMono = Systick<10_000>; // 10 kHz / 100 µs granularity
@@ -67,10 +67,10 @@ mod app {
         hello_state: HelloState,
         i: u8,
         pwm_max: u16,
-        pwm1: PwmChannel<TIM2, C1>,
-        pwm2: PwmChannel<TIM2, C2>,
-        pwm3: PwmChannel<TIM2, C3>,
-        pwm4: PwmChannel<TIM2, C4>,
+        pwm1: PwmChannel<pac::TIM2, C1>,
+        pwm2: PwmChannel<pac::TIM2, C2>,
+        pwm3: PwmChannel<pac::TIM2, C3>,
+        pwm4: PwmChannel<pac::TIM2, C4>,
     }
 
     #[init]
@@ -82,17 +82,17 @@ mod app {
 
         let clocks = rcc
             .cfgr
-            .use_hse(8.mhz())
-            .sysclk(72.mhz())
-            .hclk(72.mhz())
-            .pclk1(36.mhz())
-            .pclk2(72.mhz())
-            .adcclk(12.mhz())
+            .use_hse(8.MHz())
+            .sysclk(72.MHz())
+            .hclk(72.MHz())
+            .pclk1(36.MHz())
+            .pclk2(72.MHz())
+            .adcclk(12.MHz())
             .freeze(&mut flash.acr);
         assert!(clocks.usbclk_valid());
 
         // Initialize the monotonic
-        let mono = Systick::new(cx.core.SYST, clocks.sysclk().0);
+        let mono = Systick::new(cx.core.SYST, clocks.sysclk().raw());
 
         let mut gpioa = cx.device.GPIOA.split();
         let mut gpiob = cx.device.GPIOB.split();
@@ -120,7 +120,7 @@ mod app {
 
         // c1 & co type is: PwmChannel<TIM2, C1> etc.
         let (mut pwm1, mut pwm2, mut pwm3, mut pwm4) = Timer::tim2(cx.device.TIM2, &clocks)
-            .pwm::<Tim2NoRemap, _, _, _>(pins, &mut afio.mapr, 1.khz())
+            .pwm::<Tim2NoRemap, _, _>(pins, &mut afio.mapr, 1.kHz())
             .split();
 
         let pwm_max = pwm1.get_max_duty();
@@ -129,10 +129,10 @@ mod app {
         pwm3.enable();
         pwm4.enable();
 
-        pwm1.set_duty(0);
-        pwm2.set_duty(0);
-        pwm3.set_duty(0);
-        pwm4.set_duty(0);
+        pwm1.set_duty(1);
+        pwm2.set_duty(1);
+        pwm3.set_duty(1);
+        pwm4.set_duty(1);
 
         // *** Begin USB setup ***
 
@@ -142,7 +142,7 @@ mod app {
         // will not reset your device when you upload new firmware.
         let mut usb_dp = gpioa.pa12.into_push_pull_output(&mut gpioa.crh);
         usb_dp.set_low();
-        asm::delay(clocks.sysclk().0 / 100);
+        asm::delay(clocks.sysclk().raw() / 100);
 
         let usb_dm = gpioa.pa11;
         let usb_dp = usb_dp.into_floating_input(&mut gpioa.crh);
@@ -171,12 +171,18 @@ mod app {
         // Set "busy" pin up each 100ms, feed the watchdog
         periodic::spawn().ok();
 
+        let duty_init = 28;
+        set_pwm::spawn_after(0u64.millis(), Cmd::Set1, duty_init).ok();
+        set_pwm::spawn_after(0u64.millis(), Cmd::Set2, duty_init).ok();
+        set_pwm::spawn_after(0u64.millis(), Cmd::Set3, duty_init).ok();
+        set_pwm::spawn_after(0u64.millis(), Cmd::Set4, duty_init).ok();
+
         // Signal hello with pwm
-        hello::spawn_after(1000.millis()).ok();
+        hello::spawn_after(3000u64.millis()).ok();
 
         // Start the hardware watchdog
         let mut watchdog = IndependentWatchdog::new(cx.device.IWDG);
-        watchdog.start(500.ms());
+        watchdog.start(500u32.millis());
 
         (
             Shared {
@@ -196,7 +202,7 @@ mod app {
                 pwm2,
                 pwm3,
                 pwm4,
-                i: 0,
+                i: duty_init,
             },
             init::Monotonics(mono),
         )
@@ -207,7 +213,7 @@ mod app {
     fn idle(cx: idle::Context) -> ! {
         let mut busy = cx.shared.busy;
         loop {
-            (&mut busy).lock(|busy| busy.set_low());
+            busy.lock(|busy| busy.set_low());
             // Wait for interrupt...
             asm::wfi();
         }
@@ -218,15 +224,15 @@ mod app {
     #[task(priority=1, shared=[busy], local=[watchdog])]
     fn periodic(cx: periodic::Context) {
         let mut busy = cx.shared.busy;
-        (&mut busy).lock(|busy| busy.set_high());
+        busy.lock(|busy| busy.set_high());
         cx.local.watchdog.feed();
-        periodic::spawn_after(100.millis()).ok();
+        periodic::spawn_after(100u64.millis()).ok();
     }
 
     #[task(priority=2, capacity=2, shared=[busy, led_on, led])]
     fn led_blink(cx: led_blink::Context, ms: u64) {
         let mut busy = cx.shared.busy;
-        (&mut busy).lock(|busy| busy.set_high());
+        busy.lock(|busy| busy.set_high());
 
         let mut led_on = cx.shared.led_on;
         let mut led = cx.shared.led;
@@ -243,7 +249,7 @@ mod app {
     #[task(priority=2, shared=[busy, led_on, led])]
     fn led_off(cx: led_off::Context) {
         let mut busy = cx.shared.busy;
-        (&mut busy).lock(|busy| busy.set_high());
+        busy.lock(|busy| busy.set_high());
 
         let mut led = cx.shared.led;
         let mut led_on = cx.shared.led_on;
@@ -256,7 +262,7 @@ mod app {
     #[task(priority=5, binds=USB_HP_CAN_TX, shared=[busy, usb_dev, serial, state, cmd])]
     fn usb_tx(cx: usb_tx::Context) {
         let mut busy = cx.shared.busy;
-        (&mut busy).lock(|busy| busy.set_high());
+        busy.lock(|busy| busy.set_high());
 
         let mut usb_dev = cx.shared.usb_dev;
         let mut serial = cx.shared.serial;
@@ -271,7 +277,7 @@ mod app {
     #[task(priority=5, binds=USB_LP_CAN_RX0, shared=[busy, usb_dev, serial, state, cmd])]
     fn usb_rx0(cx: usb_rx0::Context) {
         let mut busy = cx.shared.busy;
-        (&mut busy).lock(|busy| busy.set_high());
+        busy.lock(|busy| busy.set_high());
 
         let mut usb_dev = cx.shared.usb_dev;
         let mut serial = cx.shared.serial;
@@ -337,10 +343,10 @@ mod app {
         }
     }
 
-    #[task(priority=7, shared=[busy], local=[pwm_max, pwm1, pwm2, pwm3, pwm4])]
+    #[task(priority=7, capacity=8, shared=[busy], local=[pwm_max, pwm1, pwm2, pwm3, pwm4])]
     fn set_pwm(cx: set_pwm::Context, ch: Cmd, da: u8) {
         let mut busy = cx.shared.busy;
-        (&mut busy).lock(|busy| busy.set_high());
+        busy.lock(|busy| busy.set_high());
 
         let mut d = ((da as u32 * *cx.local.pwm_max as u32) / 256u32) as u16;
         if d < 1 {
@@ -358,10 +364,10 @@ mod app {
         led_blink::spawn(10).ok();
     }
 
-    #[task(priority=1, shared=[busy], local=[hello_state, i])]
+    #[task(priority=1, shared=[busy], local=[hello_state, i, d: usize = 0])]
     fn hello(cx: hello::Context) {
         let mut busy = cx.shared.busy;
-        (&mut busy).lock(|busy| busy.set_high());
+        busy.lock(|busy| busy.set_high());
 
         let hello_state = cx.local.hello_state;
         let i = cx.local.i;
@@ -378,10 +384,15 @@ mod app {
                 }
             }
             HelloState::GoDown => {
-                if *i > 0 {
-                    *i -= 1;
+                let d = cx.local.d;
+                if *d < 100 {
+                    *d += 1;
                 } else {
-                    *hello_state = HelloState::Idle;
+                    if *i > 28 {
+                        *i -= 1;
+                    } else {
+                        *hello_state = HelloState::Idle;
+                    }
                 }
             }
             _ => (),
@@ -397,7 +408,13 @@ mod app {
         set_pwm::spawn(Cmd::Set4, *i).ok();
 
         if *hello_state != HelloState::Idle {
-            hello::spawn_after(5.millis()).ok();
+            hello::spawn_after(20u64.millis()).ok();
+        } else {
+            let pwm_idle = 105;
+            set_pwm::spawn_after(5000u64.millis(), Cmd::Set1, pwm_idle).ok();
+            set_pwm::spawn_after(5000u64.millis(), Cmd::Set2, pwm_idle).ok();
+            set_pwm::spawn_after(5000u64.millis(), Cmd::Set3, pwm_idle).ok();
+            set_pwm::spawn_after(5000u64.millis(), Cmd::Set4, pwm_idle).ok();
         }
     }
 }

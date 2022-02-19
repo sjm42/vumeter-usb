@@ -463,7 +463,7 @@ dependencies = [
 [[package]]
 name = "stm32f1xx-hal"
 version = "0.8.0"
-source = "git+https://github.com/stm32-rs/stm32f1xx-hal.git#214b426cb94e2f4217aa4601d301a739801d90a8"
+source = "git+https://github.com/stm32-rs/stm32f1xx-hal.git#c508256c41e2dc3a2daa5e1d1492e98a708715de"
 dependencies = [
  "bxcan",
  "cortex-m",
@@ -555,8 +555,8 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "cortex-m-rtic",
- "cortex-m-semihosting",
  "embedded-hal",
+ "fugit",
  "panic-semihosting",
  "stm32-usbd",
  "stm32f1xx-hal",
