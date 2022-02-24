@@ -191,6 +191,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fugit-timer"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9607bfc4c388f9d629704f56ede4a007546cad417b3bcd6fc7c87dc7edce04a"
+dependencies = [
+ "fugit",
+ "nb 1.0.0",
+]
+
+[[package]]
 name = "gcd"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -463,14 +473,16 @@ dependencies = [
 [[package]]
 name = "stm32f1xx-hal"
 version = "0.8.0"
-source = "git+https://github.com/stm32-rs/stm32f1xx-hal.git#c508256c41e2dc3a2daa5e1d1492e98a708715de"
+source = "git+https://github.com/stm32-rs/stm32f1xx-hal.git#f30cb81730ea6289cac77e8f96089846bf2cf667"
 dependencies = [
+ "bitflags",
  "bxcan",
  "cortex-m",
  "cortex-m-rt",
  "embedded-dma",
  "embedded-hal",
  "fugit",
+ "fugit-timer",
  "nb 1.0.0",
  "stm32-usbd",
  "stm32f1",
