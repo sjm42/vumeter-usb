@@ -22,7 +22,7 @@ cortex-m-rtic = { git = "https://github.com/rtic-rs/cortex-m-rtic.git" }
 # cortex-m-rtic = { path = "../00ext/cortex-m-rtic" }
 systick-monotonic = { git = "https://github.com/rtic-rs/systick-monotonic.git" }
 # systick-monotonic = { path = "../00ext/systick-monotonic" }
-# cortex-m-semihosting = "0"
+cortex-m-semihosting = "0"
 embedded-hal = "0"
 stm32-usbd = "0"
 usb-device = "0"
