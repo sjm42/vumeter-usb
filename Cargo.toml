@@ -12,7 +12,8 @@ blue_pill = ["stm32f1xx-hal"]
 [dependencies.stm32f1xx-hal]
 optional = true
 features = ["stm32f103", "rt", "stm32-usbd"]
-git = "https://github.com/stm32-rs/stm32f1xx-hal.git"
+# git = "https://github.com/stm32-rs/stm32f1xx-hal.git"
+version = "0"
 
 
 [dependencies]

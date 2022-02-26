@@ -10,10 +10,9 @@ use panic_semihosting as _;
 #[rtic::app(device = stm32f1xx_hal::pac, peripherals = true, dispatchers = [DMA1_CHANNEL1, DMA1_CHANNEL2, DMA1_CHANNEL3])]
 mod app {
     use cortex_m::asm;
-    use systick_monotonic::*;
-    use usb_device::prelude::*;
-
     use stm32f1xx_hal as hal;
+    use systick_monotonic::{fugit::*, *};
+    use usb_device::prelude::*;
 
     use hal::timer::{Tim2NoRemap, Timer};
     use hal::usb::{Peripheral, UsbBus, UsbBusType};
@@ -82,17 +81,17 @@ mod app {
 
         let clocks = rcc
             .cfgr
-            .use_hse(8.MHz())
-            .sysclk(72.MHz())
-            .hclk(72.MHz())
-            .pclk1(36.MHz())
-            .pclk2(72.MHz())
-            .adcclk(12.MHz())
+            .use_hse(8.mhz())
+            .sysclk(72.mhz())
+            .hclk(72.mhz())
+            .pclk1(36.mhz())
+            .pclk2(72.mhz())
+            .adcclk(12.mhz())
             .freeze(&mut flash.acr);
         assert!(clocks.usbclk_valid());
 
         // Initialize the monotonic
-        let mono = Systick::new(cx.core.SYST, clocks.sysclk().raw());
+        let mono = Systick::new(cx.core.SYST, clocks.sysclk().0);
 
         let mut gpioa = cx.device.GPIOA.split();
         let mut gpiob = cx.device.GPIOB.split();
@@ -120,7 +119,7 @@ mod app {
 
         // c1 & co type is: PwmChannel<TIM2, C1> etc.
         let (mut pwm1, mut pwm2, mut pwm3, mut pwm4) = Timer::tim2(cx.device.TIM2, &clocks)
-            .pwm::<Tim2NoRemap, _, _>(pins, &mut afio.mapr, 1.kHz())
+            .pwm::<Tim2NoRemap, _, _, _>(pins, &mut afio.mapr, 1.khz())
             .split();
 
         let pwm_max = pwm1.get_max_duty();
@@ -142,7 +141,7 @@ mod app {
         // will not reset your device when you upload new firmware.
         let mut usb_dp = gpioa.pa12.into_push_pull_output(&mut gpioa.crh);
         usb_dp.set_low();
-        asm::delay(clocks.sysclk().raw() / 100);
+        asm::delay(clocks.sysclk().0 / 100);
 
         let usb_dm = gpioa.pa11;
         let usb_dp = usb_dp.into_floating_input(&mut gpioa.crh);
@@ -182,7 +181,7 @@ mod app {
 
         // Start the hardware watchdog
         let mut watchdog = IndependentWatchdog::new(cx.device.IWDG);
-        watchdog.start(500u32.millis());
+        watchdog.start(500.ms());
 
         (
             Shared {
