@@ -118,7 +118,7 @@ dependencies = [
 [[package]]
 name = "cortex-m-rtic"
 version = "1.0.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#a765f3fffac95f270ce416dc15acd063b215f027"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#c6231d81d843815169492daaa947066234d4a9bf"
 dependencies = [
  "bare-metal 1.0.0",
  "cortex-m",
@@ -132,7 +132,7 @@ dependencies = [
 [[package]]
 name = "cortex-m-rtic-macros"
 version = "1.0.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#a765f3fffac95f270ce416dc15acd063b215f027"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git#c6231d81d843815169492daaa947066234d4a9bf"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -342,9 +342,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.5.4"
+version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d07a8629359eb56f1e2fb1652bb04212c072a87ba68546a04065d525673ac461"
+checksum = "1a11647b6b25ff05a515cb92c365cec08801e83423a235b51e231e1808747286"
 dependencies = [
  "aho-corasick",
  "memchr",
