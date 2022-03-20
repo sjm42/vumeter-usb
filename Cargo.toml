@@ -13,23 +13,21 @@ blue_pill = ["stm32f1xx-hal"]
 optional = true
 features = ["stm32f103", "rt", "stm32-usbd"]
 # git = "https://github.com/stm32-rs/stm32f1xx-hal.git"
-version = "0.8"
-
+version = "0.9"
 
 [dependencies]
 cortex-m = "0"
 cortex-m-rt = "0"
-cortex-m-rtic = { git = "https://github.com/rtic-rs/cortex-m-rtic.git" }
-# cortex-m-rtic = { path = "../00ext/cortex-m-rtic" }
-systick-monotonic = { git = "https://github.com/rtic-rs/systick-monotonic.git" }
-# systick-monotonic = { path = "../00ext/systick-monotonic" }
-cortex-m-semihosting = "0"
+cortex-m-rtic = "1"
+systick-monotonic = "1"
+# cortex-m-rtic = { git = "https://github.com/rtic-rs/cortex-m-rtic.git" }
+# systick-monotonic = { git = "https://github.com/rtic-rs/systick-monotonic.git" }
 embedded-hal = "0"
 stm32-usbd = "0"
 usb-device = "0"
 usbd-serial = "0"
-panic-semihosting = "0"
-fugit = "*"
+panic-halt = "0"
+fugit = "0"
 
 # this lets you use `cargo fix`!
 [[bin]]
