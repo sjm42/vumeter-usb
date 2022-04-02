@@ -4,7 +4,9 @@ set -e
 
 usage()
 {
-    echo "Usage: $0 <Bluepill | blacKpill | Nucleo_f411 | nRf52840-dongle | nrf52840-Dk> <Build | Clippy | Flash | Dfu | Nrfdfu>"
+	echo "Usage: $0 b|k|n|r|d b|c|f|d|n"
+	echo "  Hardware: b = Blue pill, k = Blackpill, n = Nucleo F411, r = nRf52840-dongle, d = nrf52840-Dk"
+	echo "  Operation: b = build, c = clippy, f = cargo flash, d = dfu flash, n =nrfdfu flash"
     exit 1
 }
 
