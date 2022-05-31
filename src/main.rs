@@ -2,38 +2,49 @@
 
 #![no_std]
 #![no_main]
-#![allow(non_snake_case)]
+#![feature(alloc_error_handler)]
+// #![allow(non_snake_case)]
+
 // #![deny(warnings)]
 
+extern crate alloc;
+extern crate no_std_compat as std;
+
+use alloc_cortex_m::CortexMHeap;
+use core::alloc::Layout;
 use panic_halt as _;
+
+#[global_allocator]
+static ALLOCATOR: CortexMHeap = CortexMHeap::empty();
+
+#[allow(clippy::empty_loop)]
+#[alloc_error_handler]
+fn oom(_: Layout) -> ! {
+    loop {}
+}
 
 #[rtic::app(device = stm32f1xx_hal::pac, peripherals = true, dispatchers = [DMA1_CHANNEL1, DMA1_CHANNEL2, DMA1_CHANNEL3])]
 mod app {
     use cortex_m::asm;
     use stm32f1xx_hal as hal;
     // use systick_monotonic::{fugit::*, *};
+
+    use embedded_hal::PwmPin;
+    use hal::timer::{Tim2NoRemap, Timer};
+    use hal::usb::{Peripheral, UsbBus, UsbBusType};
+    use hal::watchdog::IndependentWatchdog;
+    use hal::{gpio::*, prelude::*};
+    use std::prelude::v1::*;
     use systick_monotonic::*;
     use usb_device::prelude::*;
 
-    use hal::timer::{Tim2NoRemap, Timer};
-    use hal::usb::{Peripheral, UsbBus, UsbBusType};
-    use hal::{gpio::*, pac, prelude::*};
-    use hal::{timer::*, watchdog::IndependentWatchdog};
+    const CMD_OFFSET: u8 = 0x30;
+    const PWM_MAX: u8 = 192;
 
     #[monotonic(binds=SysTick, default=true)]
     type MyMono = Systick<10_000>; // 10 kHz / 100 µs granularity
 
-    #[derive(Copy, Clone, Debug, PartialEq)]
-    #[repr(u8)]
-    pub enum Cmd {
-        None = 0x00,
-        Set1 = 0x31,
-        Set2,
-        Set3,
-        Set4,
-    }
-
-    #[derive(Copy, Clone, Debug, PartialEq)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     #[repr(u8)]
     pub enum CmdState {
         Start1 = 0xFD,
@@ -42,7 +53,7 @@ mod app {
         Data,
     }
 
-    #[derive(Copy, Clone, Debug, PartialEq)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     #[repr(u8)]
     pub enum HelloState {
         Idle,
@@ -57,20 +68,17 @@ mod app {
         led_on: bool,
         led: ErasedPin<Output<PushPull>>,
         state: CmdState,
-        cmd: Cmd,
+        cmd: u8,
         busy: ErasedPin<Output<PushPull>>,
+        pwm: [Box<dyn PwmPin<Duty = u16>>; 4],
     }
 
     #[local]
     struct Local {
         watchdog: IndependentWatchdog,
         hello_state: HelloState,
-        i: u8,
         pwm_max: u16,
-        pwm1: PwmChannel<pac::TIM2, C1>,
-        pwm2: PwmChannel<pac::TIM2, C2>,
-        pwm3: PwmChannel<pac::TIM2, C3>,
-        pwm4: PwmChannel<pac::TIM2, C4>,
+        i: u8,
     }
 
     #[init]
@@ -122,22 +130,14 @@ mod app {
             .pwm_hz::<Tim2NoRemap, _, _>(pins, &mut afio.mapr, 1.kHz())
             .split();
         // c1 & co type is: PwmChannel<TIM2, C1> etc.
-        // let (mut pwm1, mut pwm2, mut pwm3, mut pwm4)
-
-        //= Timer::new(cx.device.TIM2, &clocks)
-        //   .pwm::<Tim2NoRemap, _, _, _>(pins, &mut afio.mapr, 1.kHz())
-        //   .split();
 
         let pwm_max = pwm1.get_max_duty();
-        pwm1.enable();
-        pwm2.enable();
-        pwm3.enable();
-        pwm4.enable();
-
-        pwm1.set_duty(1);
-        pwm2.set_duty(1);
-        pwm3.set_duty(1);
-        pwm4.set_duty(1);
+        let pwm: [Box<dyn PwmPin<Duty = u16>>; 4] = [
+            Box::new(pwm1),
+            Box::new(pwm2),
+            Box::new(pwm3),
+            Box::new(pwm4),
+        ];
 
         // *** Begin USB setup ***
 
@@ -177,13 +177,12 @@ mod app {
         periodic::spawn().ok();
 
         let duty_init = 28;
-        set_pwm::spawn_after(0u64.millis(), Cmd::Set1, duty_init).ok();
-        set_pwm::spawn_after(0u64.millis(), Cmd::Set2, duty_init).ok();
-        set_pwm::spawn_after(0u64.millis(), Cmd::Set3, duty_init).ok();
-        set_pwm::spawn_after(0u64.millis(), Cmd::Set4, duty_init).ok();
+        for ch in 1..=4u8 {
+            set_pwm::spawn_after(100u64.millis(), CMD_OFFSET + ch, duty_init).ok();
+        }
 
         // Signal hello with pwm
-        hello::spawn_after(3000u64.millis()).ok();
+        hello::spawn_after(2000u64.millis()).ok();
 
         // Start the hardware watchdog
         let mut watchdog = IndependentWatchdog::new(cx.device.IWDG);
@@ -196,17 +195,14 @@ mod app {
                 led,
                 led_on: false,
                 state: CmdState::Start1,
-                cmd: Cmd::None,
+                cmd: 0,
                 busy,
+                pwm,
             },
             Local {
                 watchdog,
                 hello_state: HelloState::GoUp,
                 pwm_max,
-                pwm1,
-                pwm2,
-                pwm3,
-                pwm4,
                 i: duty_init,
             },
             init::Monotonics(mono),
@@ -298,7 +294,7 @@ mod app {
         usb_dev: &mut usb_device::prelude::UsbDevice<'static, B>,
         serial: &mut usbd_serial::SerialPort<'static, B>,
         state: &mut CmdState,
-        cmd: &mut Cmd,
+        cmd: &mut u8,
     ) {
         if !usb_dev.poll(&mut [serial]) {
             return;
@@ -326,16 +322,12 @@ mod app {
                     CmdState::Cmd => {
                         *state = CmdState::Data;
                         // We cannot use TryInto trait here since we are no_std, sigh
-                        match *c {
-                            0x31 => *cmd = Cmd::Set1,
-                            0x32 => *cmd = Cmd::Set2,
-                            0x33 => *cmd = Cmd::Set3,
-                            0x34 => *cmd = Cmd::Set4,
-                            _ => {
-                                // Unknown Cmd
-                                *state = CmdState::Start1;
-                                *cmd = Cmd::None;
-                            }
+                        if *c > CMD_OFFSET && *c < CMD_OFFSET + PWM_MAX {
+                            *cmd = *c;
+                        } else {
+                            // Unknown Cmd
+                            *state = CmdState::Start1;
+                            *cmd = 0x00;
                         }
                     }
                     CmdState::Data => {
@@ -348,10 +340,16 @@ mod app {
         }
     }
 
-    #[task(priority=7, capacity=8, shared=[busy], local=[pwm_max, pwm1, pwm2, pwm3, pwm4])]
-    fn set_pwm(cx: set_pwm::Context, ch: Cmd, da: u8) {
+    #[task(priority=7, capacity=8, local=[pwm_max], shared=[busy, pwm])]
+    fn set_pwm(cx: set_pwm::Context, ch: u8, da: u8) {
         let mut busy = cx.shared.busy;
         busy.lock(|busy| busy.set_high());
+        let mut pwm = cx.shared.pwm;
+
+        // we only support 4 channels here
+        if !(CMD_OFFSET + 1..=CMD_OFFSET + 4).contains(&ch) {
+            return;
+        }
 
         let mut d = ((da as u32 * *cx.local.pwm_max as u32) / 256u32) as u16;
         if d < 1 {
@@ -359,13 +357,10 @@ mod app {
             d = 1;
         }
 
-        match ch {
-            Cmd::Set1 => cx.local.pwm1.set_duty(d),
-            Cmd::Set2 => cx.local.pwm2.set_duty(d),
-            Cmd::Set3 => cx.local.pwm3.set_duty(d),
-            Cmd::Set4 => cx.local.pwm4.set_duty(d),
-            _ => {}
-        }
+        // i will be 0..3 inclusive
+        let i = (ch - CMD_OFFSET - 1) as usize;
+        (&mut pwm).lock(|pwm| pwm[i].set_duty(d));
+
         led_blink::spawn(10).ok();
     }
 
@@ -406,19 +401,17 @@ mod app {
         //  because the task has higher priority.
         // This is by design and exactly what we want here.
 
-        set_pwm::spawn(Cmd::Set1, *i).ok();
-        set_pwm::spawn(Cmd::Set2, *i).ok();
-        set_pwm::spawn(Cmd::Set3, *i).ok();
-        set_pwm::spawn(Cmd::Set4, *i).ok();
+        for ch in 1..=4u8 {
+            set_pwm::spawn(CMD_OFFSET + ch, *i).ok();
+        }
 
         if *hello_state != HelloState::Idle {
             hello::spawn_after(20u64.millis()).ok();
         } else {
             let pwm_idle = 105;
-            set_pwm::spawn_after(5000u64.millis(), Cmd::Set1, pwm_idle).ok();
-            set_pwm::spawn_after(5000u64.millis(), Cmd::Set2, pwm_idle).ok();
-            set_pwm::spawn_after(5000u64.millis(), Cmd::Set3, pwm_idle).ok();
-            set_pwm::spawn_after(5000u64.millis(), Cmd::Set4, pwm_idle).ok();
+            for ch in 1..=4u8 {
+                set_pwm::spawn_after(5000u64.millis(), CMD_OFFSET + ch, pwm_idle).ok();
+            }
         }
     }
 }

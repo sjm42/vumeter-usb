@@ -24,14 +24,17 @@ features = ["rt", "stm32f103"]
 
 [dependencies.stm32f4xx-hal]
 optional = true
-version = "0.12"
+version = "0.13"
 features = ["rt", "stm32f411"]
 
 
 [dependencies]
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
-cortex-m-rtic = "1.0"
+cortex-m-rtic = "1.1"
+alloc-cortex-m = "0.4"
+no-std-compat = { version = "0.4", features = ["alloc"] }
+
 systick-monotonic = "1.0"
 # cortex-m-rtic = { git = "https://github.com/rtic-rs/cortex-m-rtic.git" }
 # systick-monotonic = { git = "https://github.com/rtic-rs/systick-monotonic.git" }
@@ -41,6 +44,7 @@ usb-device = "0.2"
 usbd-serial = "0.1"
 panic-halt = "0.2"
 fugit = "0.3"
+lazy_static = { version = "1.4", features = ["spin_no_std"] }
 
 # this lets you use `cargo fix`!
 [[bin]]
