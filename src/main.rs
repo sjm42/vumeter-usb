@@ -23,17 +23,25 @@ fn oom(_: Layout) -> ! {
     loop {}
 }
 
-#[rtic::app(device = stm32f1xx_hal::pac, peripherals = true, dispatchers = [DMA1_CHANNEL1, DMA1_CHANNEL2, DMA1_CHANNEL3])]
+#[cfg(feature = "stm32f103")]
+use stm32f1xx_hal as hal;
+
+// This is not completely ported to stm32f4xx yet, but it should not be too hard.
+#[cfg(feature = "stm32f411")]
+use stm32f4xx_hal as hal;
+
+// For stm32f4xx use something like
+// #[rtic::app(device = hal::pac, peripherals = true, dispatchers = [DMA2_STREAM1, DMA2_STREAM2, DMA2_STREAM3])]
+
+#[rtic::app(device = hal::pac, peripherals = true, dispatchers = [DMA1_CHANNEL1, DMA1_CHANNEL2, DMA1_CHANNEL3])]
 mod app {
     use cortex_m::asm;
-    use stm32f1xx_hal as hal;
-    // use systick_monotonic::{fugit::*, *};
 
-    use embedded_hal::PwmPin;
-    use hal::timer::{Tim2NoRemap, Timer};
+    use crate::hal;
     use hal::usb::{Peripheral, UsbBus, UsbBusType};
     use hal::watchdog::IndependentWatchdog;
     use hal::{gpio::*, prelude::*};
+    use hal::{pac::TIM2, timer::*};
     use std::prelude::v1::*;
     use systick_monotonic::*;
     use usb_device::prelude::*;
@@ -61,6 +69,26 @@ mod app {
         GoDown,
     }
 
+    pub struct MyPwm {
+        max: u16,
+        ch1: PwmChannel<TIM2, C1>,
+        ch2: PwmChannel<TIM2, C2>,
+        ch3: PwmChannel<TIM2, C3>,
+        ch4: PwmChannel<TIM2, C4>,
+    }
+    impl MyPwm {
+        pub fn set_duty(&mut self, ch: u8, value: u8) {
+            let d = (((value as u32 * self.max as u32) / 256u32) as u16).max(1);
+            match ch {
+                1 => self.ch1.set_duty(d),
+                2 => self.ch2.set_duty(d),
+                3 => self.ch3.set_duty(d),
+                4 => self.ch4.set_duty(d),
+                _ => {}
+            }
+        }
+    }
+
     #[shared]
     struct Shared {
         usb_dev: UsbDevice<'static, UsbBusType>,
@@ -70,14 +98,13 @@ mod app {
         state: CmdState,
         cmd: u8,
         busy: ErasedPin<Output<PushPull>>,
-        pwm: [Box<dyn PwmPin<Duty = u16>>; 4],
+        pwm: MyPwm,
     }
 
     #[local]
     struct Local {
         watchdog: IndependentWatchdog,
         hello_state: HelloState,
-        pwm_max: u16,
         i: u8,
     }
 
@@ -126,18 +153,18 @@ mod app {
         // then you must specify the remap generic parameter. Otherwise, if there is no such ambiguity,
         // the remap generic parameter can be omitted without complains from the compiler.
 
-        let (mut pwm1, mut pwm2, mut pwm3, mut pwm4) = Timer::new(cx.device.TIM2, &clocks)
+        let (ch1, ch2, ch3, ch4) = Timer::new(cx.device.TIM2, &clocks)
             .pwm_hz::<Tim2NoRemap, _, _>(pins, &mut afio.mapr, 1.kHz())
             .split();
         // c1 & co type is: PwmChannel<TIM2, C1> etc.
 
-        let pwm_max = pwm1.get_max_duty();
-        let pwm: [Box<dyn PwmPin<Duty = u16>>; 4] = [
-            Box::new(pwm1),
-            Box::new(pwm2),
-            Box::new(pwm3),
-            Box::new(pwm4),
-        ];
+        let pwm = MyPwm {
+            max: ch1.get_max_duty(),
+            ch1,
+            ch2,
+            ch3,
+            ch4,
+        };
 
         // *** Begin USB setup ***
 
@@ -202,7 +229,6 @@ mod app {
             Local {
                 watchdog,
                 hello_state: HelloState::GoUp,
-                pwm_max,
                 i: duty_init,
             },
             init::Monotonics(mono),
@@ -340,7 +366,7 @@ mod app {
         }
     }
 
-    #[task(priority=7, capacity=8, local=[pwm_max], shared=[busy, pwm])]
+    #[task(priority=7, capacity=8, shared=[busy, pwm])]
     fn set_pwm(cx: set_pwm::Context, ch: u8, da: u8) {
         let mut busy = cx.shared.busy;
         busy.lock(|busy| busy.set_high());
@@ -351,15 +377,9 @@ mod app {
             return;
         }
 
-        let mut d = ((da as u32 * *cx.local.pwm_max as u32) / 256u32) as u16;
-        if d < 1 {
-            // do not shut down pwm output completely
-            d = 1;
-        }
-
-        // i will be 0..3 inclusive
-        let i = (ch - CMD_OFFSET - 1) as usize;
-        (&mut pwm).lock(|pwm| pwm[i].set_duty(d));
+        // i will be 1..4 inclusive
+        let i = (ch - CMD_OFFSET) as u8;
+        (&mut pwm).lock(|pwm| pwm.set_duty(i, da));
 
         led_blink::spawn(10).ok();
     }
