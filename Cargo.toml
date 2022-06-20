@@ -3,46 +3,46 @@ authors = ["Sami J. Mäkinen <sjm@iki.fi>"]
 edition = "2021"
 readme = "README.md"
 name = "vumeter-usb"
-version = "0.1.0"
+version = "0.1.1"
 
+# Only STM32f103 is actually supported right now,
+# while it should be not too hard to support f411 as well.
 
 [features]
 stm32f103 = []
 stm32f411 = []
 default = ["blue_pill"]
-# default = ["black_pill"]
 
 blue_pill = ["stm32f103", "stm32f1xx-hal"]
 black_pill = ["stm32f411", "stm32f4xx-hal"]
 nucleo_f411 = ["stm32f411", "stm32f4xx-hal"]
 
+# Supported
 [dependencies.stm32f1xx-hal]
 optional = true
 version = "0.9"
 features = ["rt", "stm32f103"]
 
+# Not supported yet
 [dependencies.stm32f4xx-hal]
 optional = true
 version = "0.13"
 features = ["rt", "stm32f411"]
 
-
 [dependencies]
+alloc-cortex-m = "0.4"
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 cortex-m-rtic = "1.1"
-alloc-cortex-m = "0.4"
-no-std-compat = { version = "0.4", features = ["alloc"] }
-
-systick-monotonic = "1.0"
-# cortex-m-rtic = { git = "https://github.com/rtic-rs/cortex-m-rtic.git" }
-# systick-monotonic = { git = "https://github.com/rtic-rs/systick-monotonic.git" }
 embedded-hal = "0.2"
+fugit = "0.3"
+no-std-compat = { version = "0.4", features = ["alloc"] }
+panic-halt = "0.2"
 stm32-usbd = "0.6"
+systick-monotonic = "1.0"
 usb-device = "0.2"
 usbd-serial = "0.1"
-panic-halt = "0.2"
-fugit = "0.3"
+
 
 # this lets you use `cargo fix`!
 [[bin]]
