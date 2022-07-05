@@ -11,11 +11,12 @@ version = "0.1.1"
 [features]
 stm32f103 = []
 stm32f411 = []
-default = ["blue_pill"]
+# default = ["blue_pill"]
+default = ["black_pill"]
 
-blue_pill = ["stm32f103", "stm32f1xx-hal"]
-black_pill = ["stm32f411", "stm32f4xx-hal"]
-nucleo_f411 = ["stm32f411", "stm32f4xx-hal"]
+blue_pill = ["stm32f1xx-hal", "stm32f103"]
+black_pill = ["stm32f4xx-hal", "stm32f411"]
+nucleo_f411 = ["stm32f4xx-hal", "stm32f411"]
 
 # Supported
 [dependencies.stm32f1xx-hal]
@@ -27,7 +28,7 @@ features = ["rt", "stm32f103"]
 [dependencies.stm32f4xx-hal]
 optional = true
 version = "0.13"
-features = ["rt", "stm32f411"]
+features = ["rt", "stm32f411", "usb_fs"]
 
 [dependencies]
 alloc-cortex-m = "0.4"
