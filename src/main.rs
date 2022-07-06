@@ -245,8 +245,8 @@ mod app {
             UsbVidPid(0x16c0, 0x27dd),
         )
         .manufacturer("Siuro Hacklab")
-        .product("VU meter")
-        .serial_number("vu42")
+        .product("PWM controller")
+        .serial_number("pwm42")
         .device_class(usbd_serial::USB_CLASS_CDC)
         .build();
 
