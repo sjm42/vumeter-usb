@@ -189,7 +189,18 @@ mod app {
             gpioa.pa3.into_alternate(),
         );
         #[cfg(feature = "black_pill")]
-        let (ch1, ch2, ch3, ch4) = Timer::new(dp.TIM2, &clocks).pwm_hz(pins, 1.kHz()).split();
+        let (mut ch1, mut ch2, mut ch3, mut ch4) =
+            Timer::new(dp.TIM2, &clocks).pwm_hz(pins, 1.kHz()).split();
+
+        ch1.set_duty(1);
+        ch2.set_duty(1);
+        ch3.set_duty(1);
+        ch4.set_duty(1);
+
+        ch1.enable();
+        ch2.enable();
+        ch3.enable();
+        ch4.enable();
 
         let pwm = MyPwm {
             max: ch1.get_max_duty(),
@@ -432,34 +443,46 @@ mod app {
         led_blink::spawn(10).ok();
     }
 
+    const HELLO_MIN: u8 = 18;
+    const HELLO_MAX: u8 = 255;
+    const HELLO_IDLE: u8 = 100;
+    const HELLO_DELAY: usize = 100;
+
     #[task(priority=1, local=[hello_state, i, d: usize = 0])]
     fn hello(cx: hello::Context) {
         let hello_state = cx.local.hello_state;
         let i = cx.local.i;
+        let d = cx.local.d;
 
-        if let HelloState::Idle = hello_state {
-            return;
-        }
         match hello_state {
             HelloState::GoUp => {
-                if *i < 255 {
+                if *i < HELLO_MAX {
                     *i += 1;
                 } else {
                     *hello_state = HelloState::GoDown;
+                    *d = 1;
                 }
             }
             HelloState::GoDown => {
-                let d = cx.local.d;
-                // d is delay...
-                if *d < 100 {
+                // d is delay
+                if *d > 0 && *d < HELLO_DELAY {
                     *d += 1;
-                } else if *i > 28 {
+                } else if *i > HELLO_MIN {
                     *i -= 1;
+                    *d = 0;
+                } else if *d == 0 {
+                    *d = 1;
                 } else {
                     *hello_state = HelloState::Idle;
                 }
             }
-            _ => (),
+            HelloState::Idle => {
+                // OK we are done, in idle state
+                for ch in 1..=4u8 {
+                    set_pwm::spawn_after(2000u64.millis(), CMD_OFFSET + ch, HELLO_IDLE).ok();
+                }
+                return;
+            }
         }
 
         // Note: all do_cmd calls will block (preempt, execute immediately)
@@ -469,15 +492,8 @@ mod app {
         for ch in 1..=4u8 {
             set_pwm::spawn(CMD_OFFSET + ch, *i).ok();
         }
-
-        if *hello_state != HelloState::Idle {
-            hello::spawn_after(20u64.millis()).ok();
-        } else {
-            let pwm_idle = 105;
-            for ch in 1..=4u8 {
-                set_pwm::spawn_after(5000u64.millis(), CMD_OFFSET + ch, pwm_idle).ok();
-            }
-        }
+        // call us again after 20ms
+        hello::spawn_after(20u64.millis()).ok();
     }
 }
 // EOF
