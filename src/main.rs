@@ -115,10 +115,10 @@ mod app {
     static mut EP_MEMORY: [u32; 1024] = [0; 1024];
 
     #[init]
-    fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
+    fn init(ctx: init::Context) -> (Shared, Local, init::Monotonics) {
         static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<UsbBusType>> = None;
 
-        let dp = cx.device;
+        let dp = ctx.device;
 
         #[cfg(feature = "stm32f103")]
         let mut flash = dp.FLASH.constrain();
@@ -147,7 +147,7 @@ mod app {
         assert!(clocks.usbclk_valid());
 
         // Initialize the monotonic
-        let mono = Systick::new(cx.core.SYST, clocks.sysclk().raw());
+        let mono = Systick::new(ctx.core.SYST, clocks.sysclk().raw());
 
         let mut gpioa = dp.GPIOA.split();
         let mut gpioc = dp.GPIOC.split();
@@ -176,7 +176,7 @@ mod app {
         // then you must specify the remap generic parameter. Otherwise, if there is no such ambiguity,
         // the remap generic parameter can be omitted without complains from the compiler.
         #[cfg(feature = "blue_pill")]
-        let (ch1, ch2, ch3, ch4) = Timer::new(dp.TIM2, &clocks)
+        let (mut ch1, mut ch2, mut ch3, mut ch4) = Timer::new(dp.TIM2, &clocks)
             .pwm_hz::<Tim2NoRemap, _, _>(pins, &mut afio.mapr, 1.kHz())
             .split();
         // c1 & co type is: PwmChannel<TIM2, C1> etc.
@@ -297,7 +297,7 @@ mod app {
 
     // Background task, runs whenever no other tasks are running
     #[idle()]
-    fn idle(_cx: idle::Context) -> ! {
+    fn idle(_ctx: idle::Context) -> ! {
         loop {
             // Wait for interrupt...
             asm::wfi();
@@ -307,15 +307,17 @@ mod app {
     // Create pulses on "busy" pin each 100 milliseconds even when nothing else is active
     // and feed the watchdog to avoid hardware reset.
     #[task(priority=1, local=[watchdog])]
-    fn periodic(cx: periodic::Context) {
-        cx.local.watchdog.feed();
+    fn periodic(ctx: periodic::Context) {
+        ctx.local.watchdog.feed();
         periodic::spawn_after(100u64.millis()).ok();
     }
 
-    #[task(priority=2, capacity=2, shared=[led_on, led])]
-    fn led_blink(cx: led_blink::Context, ms: u64) {
-        let mut led_on = cx.shared.led_on;
-        let mut led = cx.shared.led;
+    #[task(priority=2, capacity=2, shared=[led, led_on])]
+    fn led_blink(ctx: led_blink::Context, ms: u64) {
+        let led_blink::SharedResources {
+            mut led,
+            mut led_on,
+        } = ctx.shared;
 
         (&mut led, &mut led_on).lock(|led, led_on| {
             if !(*led_on) {
@@ -326,10 +328,12 @@ mod app {
         });
     }
 
-    #[task(priority=2, shared=[led_on, led])]
-    fn led_off(cx: led_off::Context) {
-        let mut led = cx.shared.led;
-        let mut led_on = cx.shared.led_on;
+    #[task(priority=2, shared=[led, led_on])]
+    fn led_off(ctx: led_off::Context) {
+        let led_off::SharedResources {
+            mut led,
+            mut led_on,
+        } = ctx.shared;
         (&mut led, &mut led_on).lock(|led, led_on| {
             led.set_high();
             *led_on = false;
@@ -339,11 +343,13 @@ mod app {
     // on stm32f411 use this for USB
 
     #[task(priority=5, binds=OTG_FS, shared=[usb_dev, serial, state, cmd])]
-    fn usb_fs(cx: usb_fs::Context) {
-        let mut usb_dev = cx.shared.usb_dev;
-        let mut serial = cx.shared.serial;
-        let mut state = cx.shared.state;
-        let mut cmd = cx.shared.cmd;
+    fn usb_fs(ctx: usb_fs::Context) {
+        let usb_fs::SharedResources {
+            mut usb_dev,
+            mut serial,
+            mut state,
+            mut cmd,
+        } = ctx.shared;
 
         (&mut usb_dev, &mut serial, &mut state, &mut cmd).lock(|usb_dev, serial, state, cmd| {
             usb_poll(usb_dev, serial, state, cmd);
@@ -351,13 +357,16 @@ mod app {
     }
 
     // on stm32f103 use these for USB
+
     /*
        #[task(priority=5, binds=USB_HP_CAN_TX, shared=[usb_dev, serial, state, cmd])]
-       fn usb_tx(cx: usb_tx::Context) {
-           let mut usb_dev = cx.shared.usb_dev;
-           let mut serial = cx.shared.serial;
-           let mut state = cx.shared.state;
-           let mut cmd = cx.shared.cmd;
+       fn usb_tx(ctx: usb_tx::Context) {
+           let usb_tx::SharedResources {
+               mut usb_dev,
+               mut serial,
+               mut state,
+               mut cmd,
+           } = ctx.shared;
 
            (&mut usb_dev, &mut serial, &mut state, &mut cmd).lock(|usb_dev, serial, state, cmd| {
                usb_poll(usb_dev, serial, state, cmd);
@@ -365,11 +374,13 @@ mod app {
        }
 
        #[task(priority=5, binds=USB_LP_CAN_RX0, shared=[usb_dev, serial, state, cmd])]
-       fn usb_rx0(cx: usb_rx0::Context) {
-           let mut usb_dev = cx.shared.usb_dev;
-           let mut serial = cx.shared.serial;
-           let mut state = cx.shared.state;
-           let mut cmd = cx.shared.cmd;
+       fn usb_rx0(ctx: usb_rx0::Context) {
+           let usb_rx0::SharedResources {
+               mut usb_dev,
+               mut serial,
+               mut state,
+               mut cmd,
+           } = ctx.shared;
 
            (&mut usb_dev, &mut serial, &mut state, &mut cmd).lock(|usb_dev, serial, state, cmd| {
                usb_poll(usb_dev, serial, state, cmd);
@@ -428,8 +439,8 @@ mod app {
     }
 
     #[task(priority=7, capacity=8, shared=[pwm])]
-    fn set_pwm(cx: set_pwm::Context, ch: u8, da: u8) {
-        let mut pwm = cx.shared.pwm;
+    fn set_pwm(ctx: set_pwm::Context, ch: u8, da: u8) {
+        let mut pwm = ctx.shared.pwm;
 
         // we only support 4 channels here
         if !(CMD_OFFSET + 1..=CMD_OFFSET + 4).contains(&ch) {
@@ -449,10 +460,8 @@ mod app {
     const HELLO_DELAY: usize = 100;
 
     #[task(priority=1, local=[hello_state, i, d: usize = 0])]
-    fn hello(cx: hello::Context) {
-        let hello_state = cx.local.hello_state;
-        let i = cx.local.i;
-        let d = cx.local.d;
+    fn hello(ctx: hello::Context) {
+        let hello::LocalResources { hello_state, i, d } = ctx.local;
 
         match hello_state {
             HelloState::GoUp => {

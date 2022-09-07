@@ -3,10 +3,9 @@ authors = ["Sami J. Mäkinen <sjm@iki.fi>"]
 edition = "2021"
 readme = "README.md"
 name = "vumeter-usb"
-version = "0.1.1"
+version = "0.1.2"
 
-# Only STM32f103 is actually supported right now,
-# while it should be not too hard to support f411 as well.
+# Currently we support Blackpill and Bluepill cards
 
 [features]
 stm32f103 = []
@@ -43,7 +42,6 @@ stm32-usbd = "0.6"
 systick-monotonic = "1.0"
 usb-device = "0.2"
 usbd-serial = "0.1"
-
 
 # this lets you use `cargo fix`!
 [[bin]]
