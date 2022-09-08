@@ -341,7 +341,6 @@ mod app {
     }
 
     // on stm32f411 use this for USB
-
     #[task(priority=5, binds=OTG_FS, shared=[usb_dev, serial, state, cmd])]
     fn usb_fs(ctx: usb_fs::Context) {
         let usb_fs::SharedResources {
@@ -357,7 +356,6 @@ mod app {
     }
 
     // on stm32f103 use these for USB
-
     /*
        #[task(priority=5, binds=USB_HP_CAN_TX, shared=[usb_dev, serial, state, cmd])]
        fn usb_tx(ctx: usb_tx::Context) {
