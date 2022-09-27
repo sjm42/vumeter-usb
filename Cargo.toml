@@ -10,8 +10,8 @@ version = "0.1.2"
 [features]
 stm32f103 = []
 stm32f411 = []
-# default = ["blue_pill"]
-default = ["black_pill"]
+default = ["blue_pill"]
+# default = ["black_pill"]
 
 blue_pill = ["stm32f1xx-hal", "stm32f103"]
 black_pill = ["stm32f4xx-hal", "stm32f411"]

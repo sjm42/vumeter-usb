@@ -26,8 +26,8 @@ fn oom(_: Layout) -> ! {
 
 // use either RTIC line depending on hardware
 
-// #[rtic::app(device = stm32f1xx_hal::pac, peripherals = true, dispatchers = [DMA1_CHANNEL1, DMA1_CHANNEL2, DMA1_CHANNEL3])]
-#[rtic::app(device = stm32f4xx_hal::pac, peripherals = true, dispatchers = [DMA2_STREAM1, DMA2_STREAM2, DMA2_STREAM3])]
+// #[rtic::app(device = stm32f4xx_hal::pac, peripherals = true, dispatchers = [DMA2_STREAM1, DMA2_STREAM2, DMA2_STREAM3])]
+#[rtic::app(device = stm32f1xx_hal::pac, peripherals = true, dispatchers = [DMA1_CHANNEL1, DMA1_CHANNEL2, DMA1_CHANNEL3])]
 mod app {
     #[cfg(feature = "stm32f103")]
     use stm32f1xx_hal as hal;
@@ -341,6 +341,7 @@ mod app {
     }
 
     // on stm32f411 use this for USB
+    /*
     #[task(priority=5, binds=OTG_FS, shared=[usb_dev, serial, state, cmd])]
     fn usb_fs(ctx: usb_fs::Context) {
         let usb_fs::SharedResources {
@@ -354,37 +355,37 @@ mod app {
             usb_poll(usb_dev, serial, state, cmd);
         });
     }
+    */
 
     // on stm32f103 use these for USB
-    /*
-       #[task(priority=5, binds=USB_HP_CAN_TX, shared=[usb_dev, serial, state, cmd])]
-       fn usb_tx(ctx: usb_tx::Context) {
-           let usb_tx::SharedResources {
-               mut usb_dev,
-               mut serial,
-               mut state,
-               mut cmd,
-           } = ctx.shared;
 
-           (&mut usb_dev, &mut serial, &mut state, &mut cmd).lock(|usb_dev, serial, state, cmd| {
-               usb_poll(usb_dev, serial, state, cmd);
-           });
-       }
+    #[task(priority=5, binds=USB_HP_CAN_TX, shared=[usb_dev, serial, state, cmd])]
+    fn usb_tx(ctx: usb_tx::Context) {
+        let usb_tx::SharedResources {
+            mut usb_dev,
+            mut serial,
+            mut state,
+            mut cmd,
+        } = ctx.shared;
 
-       #[task(priority=5, binds=USB_LP_CAN_RX0, shared=[usb_dev, serial, state, cmd])]
-       fn usb_rx0(ctx: usb_rx0::Context) {
-           let usb_rx0::SharedResources {
-               mut usb_dev,
-               mut serial,
-               mut state,
-               mut cmd,
-           } = ctx.shared;
+        (&mut usb_dev, &mut serial, &mut state, &mut cmd).lock(|usb_dev, serial, state, cmd| {
+            usb_poll(usb_dev, serial, state, cmd);
+        });
+    }
 
-           (&mut usb_dev, &mut serial, &mut state, &mut cmd).lock(|usb_dev, serial, state, cmd| {
-               usb_poll(usb_dev, serial, state, cmd);
-           });
-       }
-    */
+    #[task(priority=5, binds=USB_LP_CAN_RX0, shared=[usb_dev, serial, state, cmd])]
+    fn usb_rx0(ctx: usb_rx0::Context) {
+        let usb_rx0::SharedResources {
+            mut usb_dev,
+            mut serial,
+            mut state,
+            mut cmd,
+        } = ctx.shared;
+
+        (&mut usb_dev, &mut serial, &mut state, &mut cmd).lock(|usb_dev, serial, state, cmd| {
+            usb_poll(usb_dev, serial, state, cmd);
+        });
+    }
 
     fn usb_poll<B: usb_device::bus::UsbBus>(
         usb_dev: &mut usb_device::prelude::UsbDevice<'static, B>,
