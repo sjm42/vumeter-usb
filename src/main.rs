@@ -455,7 +455,7 @@ mod app {
 
     const HELLO_MIN: u8 = 18;
     const HELLO_MAX: u8 = 255;
-    const HELLO_IDLE: u8 = 100;
+    const HELLO_IDLE: u8 = 108;
     const HELLO_DELAY: usize = 100;
 
     #[task(priority=1, local=[hello_state, i, d: usize = 0])]
@@ -500,8 +500,8 @@ mod app {
         for ch in 1..=4u8 {
             set_pwm::spawn(CMD_OFFSET + ch, *i).ok();
         }
-        // call us again after 20ms
-        hello::spawn_after(20u64.millis()).ok();
+        // call us again after 10ms
+        hello::spawn_after(10u64.millis()).ok();
     }
 }
 // EOF

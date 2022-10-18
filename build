@@ -73,7 +73,7 @@ D*|d*)
     ;;
 N*|n*)
     set -x
-    nrfdfu target/$tgt/release/cortex-m-test2
+    nrfdfu target/$tgt/release/vumeter_usb
     ;;
 *)
     usage

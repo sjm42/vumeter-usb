@@ -2,8 +2,8 @@
 authors = ["Sami J. Mäkinen <sjm@iki.fi>"]
 edition = "2021"
 readme = "README.md"
-name = "vumeter-usb"
-version = "0.1.2"
+name = "vumeter_usb"
+version = "0.1.3"
 
 # Currently we support Blackpill and Bluepill cards
 
@@ -45,7 +45,7 @@ usbd-serial = "0.1"
 
 # this lets you use `cargo fix`!
 [[bin]]
-name = "vumeter-usb"
+name = "vumeter_usb"
 test = false
 bench = false
 
