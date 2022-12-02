@@ -2,30 +2,12 @@
 
 #![no_std]
 #![no_main]
-#![feature(alloc_error_handler)]
-// #![allow(non_snake_case)]
-
-// #![deny(warnings)]
 #![allow(unused_mut)]
+// #![deny(warnings)]
 
-extern crate alloc;
-extern crate no_std_compat as std;
-
-use alloc_cortex_m::CortexMHeap;
-use core::alloc::Layout;
 use panic_halt as _;
 
-#[global_allocator]
-static ALLOCATOR: CortexMHeap = CortexMHeap::empty();
-
-#[allow(clippy::empty_loop)]
-#[alloc_error_handler]
-fn oom(_: Layout) -> ! {
-    loop {}
-}
-
 // use either RTIC line depending on hardware
-
 // #[rtic::app(device = stm32f4xx_hal::pac, peripherals = true, dispatchers = [DMA2_STREAM1, DMA2_STREAM2, DMA2_STREAM3])]
 #[rtic::app(device = stm32f1xx_hal::pac, peripherals = true, dispatchers = [DMA1_CHANNEL1, DMA1_CHANNEL2, DMA1_CHANNEL3])]
 mod app {
@@ -46,7 +28,6 @@ mod app {
     use hal::watchdog::IndependentWatchdog;
     use hal::{gpio::*, prelude::*};
     use hal::{pac::TIM2, timer::*};
-    use std::prelude::v1::*;
     use systick_monotonic::*;
     use usb_device::prelude::*;
 
@@ -119,11 +100,22 @@ mod app {
         static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<UsbBusType>> = None;
 
         let dp = ctx.device;
+        let rcc = dp.RCC.constrain();
+        let mut gpioa = dp.GPIOA.split();
+        let mut gpioc = dp.GPIOC.split();
 
         #[cfg(feature = "stm32f103")]
         let mut flash = dp.FLASH.constrain();
 
-        let rcc = dp.RCC.constrain();
+        // On blue pill stm32f103 user led is on PC13, active low
+        #[cfg(feature = "blue_pill")]
+        let mut led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh).erase();
+
+        // On Blackpill stm32f411 user led is on PC13, active low
+        #[cfg(feature = "black_pill")]
+        let mut led = gpioc.pc13.into_push_pull_output().erase();
+
+        led.set_high();
 
         #[cfg(feature = "stm32f103")]
         let clocks = rcc
@@ -135,11 +127,12 @@ mod app {
             .pclk2(72.MHz())
             .adcclk(12.MHz())
             .freeze(&mut flash.acr);
+
         #[cfg(feature = "stm32f411")]
         let clocks = rcc
             .cfgr
             .use_hse(25.MHz())
-            .sysclk(84.MHz())
+            .sysclk(72.MHz())
             .require_pll48clk()
             .freeze();
 
@@ -149,20 +142,8 @@ mod app {
         // Initialize the monotonic
         let mono = Systick::new(ctx.core.SYST, clocks.sysclk().raw());
 
-        let mut gpioa = dp.GPIOA.split();
-        let mut gpioc = dp.GPIOC.split();
-
         #[cfg(feature = "stm32f103")]
         let mut afio = dp.AFIO.constrain();
-
-        // On blue pill stm32f103 user led is on PC13, active low
-        // On Blackpill stm32f411 user led is on PC13, active low
-        #[cfg(feature = "blue_pill")]
-        let mut led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh).erase();
-        #[cfg(feature = "black_pill")]
-        let mut led = gpioc.pc13.into_push_pull_output().erase();
-
-        led.set_high();
 
         // Initialize PWM output pins
         #[cfg(feature = "blue_pill")]
@@ -257,14 +238,14 @@ mod app {
         )
         .manufacturer("Siuro Hacklab")
         .product("PWM controller")
-        .serial_number("pwm42")
+        .serial_number("sjm42")
         .device_class(usbd_serial::USB_CLASS_CDC)
         .build();
 
         // Set "busy" pin up each 100ms, feed the watchdog
         periodic::spawn().ok();
 
-        let duty_init = 28;
+        let duty_init = 1;
         for ch in 1..=4u8 {
             set_pwm::spawn_after(100u64.millis(), CMD_OFFSET + ch, duty_init).ok();
         }
@@ -275,6 +256,9 @@ mod app {
         // Start the hardware watchdog
         let mut watchdog = IndependentWatchdog::new(dp.IWDG);
         watchdog.start(500u32.millis());
+
+        // testing
+        led.set_low();
 
         (
             Shared {
@@ -328,7 +312,7 @@ mod app {
         });
     }
 
-    #[task(priority=2, shared=[led, led_on])]
+    #[task(priority=2, capacity=2, shared=[led, led_on])]
     fn led_off(ctx: led_off::Context) {
         let led_off::SharedResources {
             mut led,
@@ -340,7 +324,7 @@ mod app {
         });
     }
 
-    // on stm32f411 use this for USB
+    // *** Start of STM32F411 USB
     /*
     #[task(priority=5, binds=OTG_FS, shared=[usb_dev, serial, state, cmd])]
     fn usb_fs(ctx: usb_fs::Context) {
@@ -356,9 +340,9 @@ mod app {
         });
     }
     */
+    // *** End of STM32F411 USB
 
-    // on stm32f103 use these for USB
-
+    // *** Start of STM32F103 USB
     #[task(priority=5, binds=USB_HP_CAN_TX, shared=[usb_dev, serial, state, cmd])]
     fn usb_tx(ctx: usb_tx::Context) {
         let usb_tx::SharedResources {
@@ -372,7 +356,6 @@ mod app {
             usb_poll(usb_dev, serial, state, cmd);
         });
     }
-
     #[task(priority=5, binds=USB_LP_CAN_RX0, shared=[usb_dev, serial, state, cmd])]
     fn usb_rx0(ctx: usb_rx0::Context) {
         let usb_rx0::SharedResources {
@@ -386,6 +369,7 @@ mod app {
             usb_poll(usb_dev, serial, state, cmd);
         });
     }
+    // *** End of STM32F103 USB
 
     fn usb_poll<B: usb_device::bus::UsbBus>(
         usb_dev: &mut usb_device::prelude::UsbDevice<'static, B>,
@@ -447,15 +431,15 @@ mod app {
         }
 
         // i will be 1..4 inclusive
-        let i = (ch - CMD_OFFSET) as u8;
+        let i = ch - CMD_OFFSET;
         pwm.lock(|pwm| pwm.set_duty(i, da));
 
         led_blink::spawn(10).ok();
     }
 
-    const HELLO_MIN: u8 = 18;
+    const HELLO_MIN: u8 = 1;
     const HELLO_MAX: u8 = 255;
-    const HELLO_IDLE: u8 = 108;
+    const HELLO_IDLE: u8 = 1;
     const HELLO_DELAY: usize = 100;
 
     #[task(priority=1, local=[hello_state, i, d: usize = 0])]
@@ -504,4 +488,5 @@ mod app {
         hello::spawn_after(10u64.millis()).ok();
     }
 }
+
 // EOF
