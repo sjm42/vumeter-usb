@@ -5,15 +5,18 @@ authors = ["Sami J. Mäkinen <sjm@iki.fi>"]
 edition = "2021"
 readme = "README.md"
 name = "vumeter_usb"
-version = "0.1.4"
+version = "0.1.5"
 
 # Currently we support Blackpill and Bluepill cards
+
+### PLEASE NOTE: for unknown reason, bluepill support is broken.
+
 
 [features]
 stm32f103 = []
 stm32f411 = []
-default = ["blue_pill"]
-# default = ["black_pill"]
+# default = ["blue_pill"]
+default = ["black_pill"]
 
 blue_pill = ["stm32f1xx-hal", "stm32f103"]
 black_pill = ["stm32f4xx-hal", "stm32f411"]

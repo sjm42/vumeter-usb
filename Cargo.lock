@@ -634,7 +634,7 @@ dependencies = [
 
 [[package]]
 name = "vumeter_usb"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "cortex-m 0.7.6",
  "cortex-m-rt",
