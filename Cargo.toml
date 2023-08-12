@@ -31,7 +31,7 @@ features = ["rt", "stm32f103"]
 
 [dependencies.stm32f4xx-hal]
 optional = true
-version = "0.15"
+version = "0.17"
 features = ["rt", "stm32f411", "usb_fs"]
 
 
