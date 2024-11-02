@@ -5,47 +5,22 @@ authors = ["Sami J. Mäkinen <sjm@iki.fi>"]
 edition = "2021"
 readme = "README.md"
 name = "vumeter_usb"
-version = "0.1.7"
-
-# Currently we support Blackpill and Bluepill cards
-
-### PLEASE NOTE: for unknown reason, bluepill support is broken.
-
-
-[features]
-stm32f103 = []
-stm32f411 = []
-# default = ["blue_pill"]
-default = ["black_pill"]
-
-blue_pill = ["stm32f1xx-hal", "stm32f103"]
-black_pill = ["stm32f4xx-hal", "stm32f411"]
-nucleo_f411 = ["stm32f4xx-hal", "stm32f411"]
-
-
-[dependencies.stm32f1xx-hal]
-optional = true
-version = "0.10"
-features = ["rt", "stm32f103"]
-
-
-[dependencies.stm32f4xx-hal]
-optional = true
-version = "0.17"
-features = ["rt", "stm32f411", "usb_fs"]
+version = "1.0.0"
 
 
 [dependencies]
-cortex-m = "0.7"
-cortex-m-rt = "0.7"
-cortex-m-rtic = "1.1"
-embedded-hal = "0.2"
-fugit = "0.3"
-panic-halt = "0.2"
-stm32-usbd = "0.6"
-systick-monotonic = "1.0"
-usb-device = "0.2"
-usbd-serial = "0.1"
+cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+# cortex-m-rt = "0.7"
+embedded-hal = "1"
+# fugit = "0.3"
+panic-halt = "1"
+rtic = { version = "2.0", features = ["thumbv7-backend"] }
+rtic-time = "2"
+rtic-monotonics = { version = "2", features = ["stm32f411ce", "stm32_tim2"] }
+stm32f4xx-hal = { version = "0.22", features = ["stm32f411", "usb_fs"] }
+stm32-usbd = "0.7"
+usb-device = "0.3"
+usbd-serial = "0.2"
 
 
 # this lets you use `cargo fix`!
@@ -54,13 +29,11 @@ name = "vumeter_usb"
 test = false
 bench = false
 
-
 [profile.release]
 opt-level = 'z'
 codegen-units = 1
 debug = false
-lto = true
-
+lto = "fat"
 
 [profile.dev]
 opt-level = 'z'

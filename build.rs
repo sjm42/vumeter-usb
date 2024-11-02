@@ -14,16 +14,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 fn main() {
-    let mut memory_x = include_bytes!("memory.x").to_vec();
-    if let Some(_feature) = env::var_os("CARGO_FEATURE_BLUE_PILL") {
-        memory_x = include_bytes!("memory-blue_pill.x").to_vec();
-    }
-    if let Some(_feature) = env::var_os("CARGO_FEATURE_BLACK_PILL") {
-        memory_x = include_bytes!("memory-black_pill.x").to_vec();
-    }
-    if let Some(_feature) = env::var_os("CARGO_FEATURE_NUCLEO_F411") {
-        memory_x = include_bytes!("memory-nucleo_f411.x").to_vec();
-    }
+    let memory_x = include_bytes!("memory.x").to_vec();
 
     // Put `memory.x` in our output directory and ensure it's
     // on the linker search path.
