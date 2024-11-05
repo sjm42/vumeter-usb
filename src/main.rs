@@ -3,11 +3,8 @@
 #![no_std]
 #![no_main]
 
-// #![allow(unused_mut)]
-// #![deny(warnings)]
-
-
 #[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
 use panic_halt;
 
 use stm32f4xx_hal as hal;
@@ -67,7 +64,10 @@ impl MyPwm {
 }
 
 
-#[rtic::app(device = stm32f4xx_hal::pac, peripherals = true, dispatchers = [DMA2_STREAM4, DMA2_STREAM5, DMA2_STREAM6, DMA2_STREAM7]
+#[rtic::app(
+    device = stm32f4xx_hal::pac,
+    peripherals = true,
+    dispatchers = [DMA2_STREAM4, DMA2_STREAM5, DMA2_STREAM6, DMA2_STREAM7]
 )]
 mod app {
     use super::*;
