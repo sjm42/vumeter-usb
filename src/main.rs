@@ -17,6 +17,7 @@ use hal::otg_fs::{UsbBus, USB};
 use hal::watchdog::IndependentWatchdog;
 use hal::{gpio::*, prelude::*};
 use hal::{pac::TIM5, timer::*};
+use heapless::String;
 use rtic_monotonics::stm32::prelude::*;
 use usb_device::class_prelude::UsbBusAllocator;
 use usb_device::prelude::*;
@@ -33,6 +34,8 @@ const PWM_NCHAN: u8 = 4;
 
 const USB_VID: u16 = 0x16c0;
 const USB_PID: u16 = 0x27dd;
+
+const SER_NUM_LEN: usize = 32;
 
 // Make USB serial device globally available
 static mut G_USB_SERIAL: Option<SerialPort<UsbBus<USB>>> = None;
@@ -68,6 +71,7 @@ impl MyPwm {
 )]
 mod app {
     use super::*;
+    use core::fmt::Write;
 
     #[shared]
     struct Shared {
@@ -86,6 +90,17 @@ mod app {
     fn init(ctx: init::Context) -> (Shared, Local) {
         static mut EP_MEMORY: [u32; 1024] = [0; 1024];
         static mut USB_BUS: Option<UsbBusAllocator<stm32f4xx_hal::otg_fs::UsbBusType>> = None;
+        static mut SER_NUM: String<SER_NUM_LEN> = String::new();
+
+        let uid = hal::signature::Uid::get();
+        let mut s = itoa::Buffer::new();
+        unsafe {
+            SER_NUM.write_str(uid.lot_num()).ok();
+            SER_NUM.write_str("-").ok();
+            SER_NUM.write_str(s.format(uid.x())).ok();
+            SER_NUM.write_str("-").ok();
+            SER_NUM.write_str(s.format(uid.y())).ok();
+        }
 
         let dp = ctx.device;
         let rcc = dp.RCC.constrain();
@@ -104,7 +119,7 @@ mod app {
             .freeze();
         Mono::start(SYS_MHZ * 1_000_000);
 
-        let (_pwm_mgr, (c0, c1, c2, c3)) = dp.TIM5.pwm_hz(1.kHz(), &clocks);
+        let (_pwm_mgr, (c0, c1, c2, c3)) = dp.TIM5.pwm_hz(50.kHz(), &clocks);
         let mut pwm_c =
             [c0.with(gpioa.pa0).erase(), c1.with(gpioa.pa1).erase(), c2.with(gpioa.pa2).erase(), c3.with(gpioa.pa3).erase()];
 
@@ -130,7 +145,6 @@ mod app {
             USB_BUS.as_ref().unwrap()
         };
 
-        // let sernum = format!("", hal::signature::Uid::get());
 
         unsafe {
             G_USB_SERIAL = Some(SerialPort::new(usb_bus));
@@ -140,7 +154,7 @@ mod app {
                     .strings(&[StringDescriptors::default()
                         .manufacturer("Siuro Hacklab")
                         .product("PWM Controller")
-                        .serial_number("4242")])
+                        .serial_number(SER_NUM.as_str())])
                     .unwrap()
                     .build(),
             );
@@ -148,7 +162,7 @@ mod app {
 
 
         // Signal hello with pwm
-        // hello::spawn().ok();
+        hello::spawn().ok();
 
         // feed the watchdog
         periodic::spawn().ok();
