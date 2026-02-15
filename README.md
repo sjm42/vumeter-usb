@@ -1,8 +1,8 @@
 # vumeter-usb
 
-Bare-metal Rust firmware for a **STM32F411 "Blackpill"** board that acts as a USB-controlled 4-channel PWM VU meter.
+Bare-metal Rust firmware for a **STM32F411 "BlackPill"** board that acts as a USB-controlled 4-channel PWM VU meter.
 
-The device enumerates as a USB CDC serial device. A host application sends simple 4-byte commands over the virtual serial port to set PWM duty cycles on four independent output channels (PA0–PA3), driving analog VU meter movements or LEDs.
+The device enumerates as a USB CDC serial device. A host application sends simple 4-byte commands over the virtual serial port to set PWM duty cycles on four independent output channels (PA0–PA3), driving analog meter needle movements.
 
 ## Hardware
 
