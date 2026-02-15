@@ -10,16 +10,18 @@ use panic_halt;
 use stm32f4xx_hal as hal;
 
 use cortex_m::asm;
-use hal::otg_fs::{UsbBus, USB};
-use hal::watchdog::IndependentWatchdog;
-use hal::{gpio::*, prelude::*};
-use hal::{pac::TIM5, timer::*};
+use hal::{
+    gpio::*,
+    otg_fs::{UsbBus, USB},
+    pac::TIM5,
+    prelude::*,
+    timer::*,
+    watchdog::IndependentWatchdog,
+};
 use heapless::String;
 use rtic_monotonics::stm32::prelude::*;
-use usb_device::class_prelude::UsbBusAllocator;
-use usb_device::prelude::*;
+use usb_device::{class_prelude::UsbBusAllocator, prelude::*};
 use usbd_serial::SerialPort;
-
 
 stm32_tim2_monotonic!(Mono, 1_000_000);
 
@@ -49,7 +51,6 @@ pub enum CmdState {
     Data,
 }
 
-
 pub struct MyPwm {
     max: u16,
     pwm: [ErasedChannel<TIM5>; 4],
@@ -62,7 +63,6 @@ impl MyPwm {
         }
     }
 }
-
 
 #[rtic::app(
     device = stm32f4xx_hal::pac,
@@ -94,34 +94,35 @@ mod app {
 
         let uid = hal::signature::Uid::get();
         let mut s = itoa::Buffer::new();
-        unsafe {
-            SER_NUM.write_str(uid.lot_num()).ok();
-            SER_NUM.write_str("-").ok();
-            SER_NUM.write_str(s.format(uid.x())).ok();
-            SER_NUM.write_str("-").ok();
-            SER_NUM.write_str(s.format(uid.y())).ok();
-        }
+        let ser_num = unsafe { &mut *core::ptr::addr_of_mut!(SER_NUM) };
+        ser_num.write_str(uid.lot_num()).ok();
+        ser_num.write_str("-").ok();
+        ser_num.write_str(s.format(uid.x())).ok();
+        ser_num.write_str("-").ok();
+        ser_num.write_str(s.format(uid.y())).ok();
 
         let dp = ctx.device;
-        let rcc = dp.RCC.constrain();
-        let gpioa = dp.GPIOA.split();
-        let gpioc = dp.GPIOC.split();
+        let mut rcc = dp.RCC.freeze(
+            hal::rcc::Config::hse(HSE_MHZ.MHz())
+                .sysclk(SYS_MHZ.MHz())
+                .require_pll48clk(),
+        );
+        let gpioa = dp.GPIOA.split(&mut rcc);
+        let gpioc = dp.GPIOC.split(&mut rcc);
 
         // On Blackpill stm32f411 user led is on PC13, active low
         let mut led = gpioc.pc13.into_push_pull_output().erase();
         led.set_low();
 
-        let clocks = rcc
-            .cfgr
-            .use_hse(HSE_MHZ.MHz())
-            .sysclk(SYS_MHZ.MHz())
-            .require_pll48clk()
-            .freeze();
         Mono::start(SYS_MHZ * 1_000_000);
 
-        let (_pwm_mgr, (c0, c1, c2, c3)) = dp.TIM5.pwm_hz(50.kHz(), &clocks);
-        let mut pwm_c =
-            [c0.with(gpioa.pa0).erase(), c1.with(gpioa.pa1).erase(), c2.with(gpioa.pa2).erase(), c3.with(gpioa.pa3).erase()];
+        let (_pwm_mgr, (c0, c1, c2, c3)) = dp.TIM5.pwm_hz(50.kHz(), &mut rcc);
+        let mut pwm_c = [
+            c0.with(gpioa.pa0).erase(),
+            c1.with(gpioa.pa1).erase(),
+            c2.with(gpioa.pa2).erase(),
+            c3.with(gpioa.pa3).erase(),
+        ];
 
         for p in &mut pwm_c {
             p.set_duty(1);
@@ -133,33 +134,30 @@ mod app {
             pwm: pwm_c,
         };
 
-
         let usb = USB::new(
             (dp.OTG_FS_GLOBAL, dp.OTG_FS_DEVICE, dp.OTG_FS_PWRCLK),
             (gpioa.pa11, gpioa.pa12),
-            &clocks,
+            &rcc.clocks,
         );
 
-        let usb_bus = unsafe {
-            USB_BUS = Some(stm32f4xx_hal::otg_fs::UsbBusType::new(usb, &mut *core::ptr::addr_of_mut!( EP_MEMORY)));
-            USB_BUS.as_ref().unwrap()
-        };
-
-
         unsafe {
-            G_USB_SERIAL = Some(SerialPort::new(usb_bus));
-            G_USB_DEVICE = Some(
+            let ep_mem = &mut *core::ptr::addr_of_mut!(EP_MEMORY);
+            let bus = core::ptr::addr_of_mut!(USB_BUS);
+            *bus = Some(stm32f4xx_hal::otg_fs::UsbBusType::new(usb, ep_mem));
+            let usb_bus = (*bus).as_ref().unwrap();
+
+            *core::ptr::addr_of_mut!(G_USB_SERIAL) = Some(SerialPort::new(usb_bus));
+            *core::ptr::addr_of_mut!(G_USB_DEVICE) = Some(
                 UsbDeviceBuilder::new(usb_bus, UsbVidPid(USB_VID, USB_PID))
                     .device_class(usbd_serial::USB_CLASS_CDC)
                     .strings(&[StringDescriptors::default()
                         .manufacturer("Siuro Hacklab")
                         .product("PWM Controller")
-                        .serial_number(SER_NUM.as_str())])
+                        .serial_number(ser_num.as_str())])
                     .unwrap()
                     .build(),
             );
         }
-
 
         // Signal hello with pwm
         hello::spawn().ok();
@@ -175,9 +173,7 @@ mod app {
         led.set_high();
 
         (
-            Shared {
-                led,
-            },
+            Shared { led },
             Local {
                 watchdog,
                 pwm,
@@ -187,7 +183,6 @@ mod app {
         )
     }
 
-
     // Background task, runs whenever no other tasks are running
     #[idle()]
     fn idle(_ctx: idle::Context) -> ! {
@@ -195,7 +190,6 @@ mod app {
             asm::wfe();
         }
     }
-
 
     // Feed the watchdog to avoid hardware reset.
     #[task(priority=2, local=[watchdog])]
@@ -206,13 +200,9 @@ mod app {
         }
     }
 
-
     #[task(priority=1, shared=[led])]
     async fn led_blink(ctx: led_blink::Context, ms: u64) {
-        let led_blink::SharedResources {
-            mut led,
-            ..
-        } = ctx.shared;
+        let led_blink::SharedResources { mut led, .. } = ctx.shared;
 
         (&mut led,).lock(|led| {
             led.set_low();
@@ -224,15 +214,11 @@ mod app {
     async fn led_off(ctx: led_off::Context, ms: u64) {
         Mono::delay(ms.millis()).await;
 
-        let led_off::SharedResources {
-            mut led,
-            ..
-        } = ctx.shared;
+        let led_off::SharedResources { mut led, .. } = ctx.shared;
         (&mut led,).lock(|led| {
             led.set_high();
         });
     }
-
 
     #[task(priority=5, binds=OTG_FS, local=[state, chan])]
     fn usb_fs(cx: usb_fs::Context) {
@@ -240,16 +226,18 @@ mod app {
         static mut USB_DEVICE: Option<UsbDevice<UsbBus<USB>>> = None;
 
         let usb_dev = unsafe {
-            USB_DEVICE.get_or_insert_with(|| {
+            let dev = &mut *core::ptr::addr_of_mut!(USB_DEVICE);
+            dev.get_or_insert_with(|| {
                 // Move USB device here, leaving a None in its place
-                G_USB_DEVICE.take().unwrap()
+                (*core::ptr::addr_of_mut!(G_USB_DEVICE)).take().unwrap()
             })
         };
 
         let serial = unsafe {
-            USB_SERIAL.get_or_insert_with(|| {
+            let ser = &mut *core::ptr::addr_of_mut!(USB_SERIAL);
+            ser.get_or_insert_with(|| {
                 // Move USB serial device here, leaving a None in its place
-                G_USB_SERIAL.take().unwrap()
+                (*core::ptr::addr_of_mut!(G_USB_SERIAL)).take().unwrap()
             })
         };
 
@@ -257,12 +245,7 @@ mod app {
             return;
         }
 
-        let usb_fs::LocalResources {
-            state,
-            chan,
-            ..
-        } = cx.local;
-
+        let usb_fs::LocalResources { state, chan, .. } = cx.local;
 
         let mut buf = [0u8; 4];
         if let Ok(count) = serial.read(&mut buf) {
@@ -304,7 +287,6 @@ mod app {
         }
     }
 
-
     #[task(priority=7, local=[pwm])]
     async fn set_pwm(cx: set_pwm::Context, ch: u8, da: u8) {
         // we only support 4 channels here
@@ -314,7 +296,6 @@ mod app {
         cx.local.pwm.set_duty(ch, da);
         led_blink::spawn(10).ok();
     }
-
 
     const HELLO_MIN: u8 = 1;
     const HELLO_MAX: u8 = 255;

@@ -2,23 +2,23 @@
 
 [package]
 authors = ["Sami J. Mäkinen <sjm@iki.fi>"]
-edition = "2021"
+edition = "2024"
 readme = "README.md"
 name = "vumeter_usb"
-version = "1.0.1"
+version = "1.0.2"
 
 
 [dependencies]
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 embedded-hal = "1"
-heapless =  "0.8"
+heapless =  "0.9"
 itoa = "1"
 panic-halt = "1"
-rtic = { version = "2.1", features = ["thumbv7-backend"] }
+rtic = { version = "2.2", features = ["thumbv7-backend"] }
 rtic-time = "2"
 rtic-monotonics = { version = "2", features = ["stm32f411ce", "stm32_tim2"] }
-stm32f4xx-hal = { version = "0.22", features = ["stm32f411", "usb_fs"] }
-stm32-usbd = "0.7"
+stm32f4xx-hal = { version = "0.23", features = ["stm32f411", "usb_fs"] }
+stm32-usbd = "0.8"
 usb-device = "0.3"
 usbd-serial = "0.2"
 
