@@ -2,16 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+General contributor expectations live in `AGENTS.md`. Keep this file focused on agent-specific workflow and architecture notes.
+
 ## Build Commands
 
 ```bash
-cargo build            # debug build
-cargo build --release  # release build (optimized for size with opt-level='z' and LTO)
-cargo clippy           # lint
+./build b              # release build for the embedded target
+./build c              # clippy on the release build
+./build f              # flash with cargo-flash / probe-rs
+./build d              # build binary and flash with dfu-util
 cargo fmt              # format (max_width=120, crate-level import granularity)
 ```
 
-Cross-compiles to `thumbv7em-none-eabihf` (set in `.cargo/config.toml`). No tests or benchmarks (`test = false`, `bench = false`). This is a `#![no_std]` `#![no_main]` embedded target — standard test infrastructure does not apply.
+Direct Cargo commands still work because `.cargo/config.toml` sets the default target to `thumbv7em-none-eabihf`. No tests or benchmarks are enabled (`test = false`, `bench = false`). This is a `#![no_std]` `#![no_main]` embedded target, so validation is build-plus-hardware oriented rather than host-test oriented.
 
 ## Architecture
 

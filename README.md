@@ -22,6 +22,7 @@ The device enumerates as a USB CDC serial device. A host application sends simpl
 | Class        | CDC (Virtual COM)  |
 | Manufacturer | Siuro Hacklab      |
 | Product      | PWM Controller     |
+| Device release | Derived from crate version (`major.minor.patch -> 0xMMmp`) |
 | Serial       | Derived from MCU unique ID |
 
 ## Serial Protocol
@@ -60,7 +61,9 @@ rustup target add thumbv7em-none-eabihf
 Build:
 
 ```bash
-./build build
+./build b
+# or
+cargo build --release --target thumbv7em-none-eabihf
 ```
 
 The release profile is optimized for size (`opt-level = 'z'`, LTO enabled).
@@ -72,17 +75,22 @@ or use the utility script:
 
 ```bash
 # Example using probe-rs
-./build flash
+./build f
 # or
-./build dfu-flash
+./build d
 ```
+
+## Development Notes
+
+- Run `./build c` before submitting changes to lint the release build.
+- There is no host-side test suite yet; validate hardware-facing changes on a BlackPill board.
+- Contributor guidance lives in `AGENTS.md`. Agent-specific workflow notes live in `CLAUDE.md`.
 
 ## Dependencies
 
 - [RTIC v2](https://rtic.rs/) -- Real-Time Interrupt-driven Concurrency framework
 - [stm32f4xx-hal](https://github.com/stm32-rs/stm32f4xx-hal) -- Hardware abstraction layer
 - [usb-device](https://github.com/rust-embedded-community/usb-device) + [usbd-serial](https://github.com/rust-embedded-community/usbd-serial) -- USB CDC serial stack
-- [stm32-usbd](https://github.com/stm32-rs/stm32-usbd) -- USB peripheral driver
 
 ## License
 

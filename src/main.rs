@@ -12,7 +12,7 @@ use stm32f4xx_hal as hal;
 use cortex_m::asm;
 use hal::{
     gpio::*,
-    otg_fs::{UsbBus, USB},
+    otg_fs::{USB, UsbBus},
     pac::TIM5,
     prelude::*,
     timer::*,
@@ -35,6 +35,8 @@ const USB_VID: u16 = 0x16c0;
 const USB_PID: u16 = 0x27dd;
 
 const SER_NUM_LEN: usize = 32;
+
+include!(concat!(env!("OUT_DIR"), "/usb_device_release.rs"));
 
 // Make USB serial device globally available
 static mut G_USB_SERIAL: Option<SerialPort<UsbBus<USB>>> = None;
@@ -150,6 +152,7 @@ mod app {
             *core::ptr::addr_of_mut!(G_USB_DEVICE) = Some(
                 UsbDeviceBuilder::new(usb_bus, UsbVidPid(USB_VID, USB_PID))
                     .device_class(usbd_serial::USB_CLASS_CDC)
+                    .device_release(USB_DEVICE_RELEASE_BCD)
                     .strings(&[StringDescriptors::default()
                         .manufacturer("Siuro Hacklab")
                         .product("PWM Controller")

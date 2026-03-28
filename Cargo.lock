@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "anyhow"
+version = "1.0.102"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
+
+[[package]]
 name = "bare-metal"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -489,17 +495,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "stm32-usbd"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e633d559b5fe03caed24e1df85c9fa3916fe6191fc7099ac6fcb0281f380e9f0"
-dependencies = [
- "cortex-m",
- "usb-device",
- "vcell",
-]
-
-[[package]]
 name = "stm32f4"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -632,17 +627,15 @@ dependencies = [
 
 [[package]]
 name = "vumeter_usb"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
+ "anyhow",
  "cortex-m",
- "embedded-hal 1.0.0",
  "heapless 0.9.2",
  "itoa",
  "panic-halt",
  "rtic",
  "rtic-monotonics",
- "rtic-time",
- "stm32-usbd",
  "stm32f4xx-hal",
  "usb-device",
  "usbd-serial",
