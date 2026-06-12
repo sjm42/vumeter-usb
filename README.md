@@ -1,8 +1,11 @@
 # vumeter-usb
 
-Bare-metal Rust firmware for a **STM32F411 "BlackPill"** board that acts as a USB-controlled 4-channel PWM VU meter.
+Bare-metal Rust firmware for a **STM32F411 "BlackPill"** board that acts as a USB-controlled
+4-channel PWM VU meter.
 
-The device enumerates as a USB CDC serial device. A host application sends simple 4-byte commands over the virtual serial port to set PWM duty cycles on four independent output channels (PA0–PA3), driving analog meter needle movements.
+The device enumerates as a USB CDC serial device. A host application sends simple 4-byte commands
+over the virtual serial port to set PWM duty cycles on four independent output channels (PA0-PA3),
+driving analog meter needle movements.
 
 ## Hardware
 
@@ -22,7 +25,7 @@ The device enumerates as a USB CDC serial device. A host application sends simpl
 | Class        | CDC (Virtual COM)  |
 | Manufacturer | Siuro Hacklab      |
 | Product      | PWM Controller     |
-| Device release | Derived from crate version (`major.minor.patch -> 0xMMmp`) |
+| Device release | Generated from the crate version (`major.minor.patch -> 0xMMmp`) |
 | Serial       | Derived from MCU unique ID |
 
 ## Serial Protocol
@@ -58,15 +61,23 @@ Requires the `thumbv7em-none-eabihf` Rust target:
 rustup target add thumbv7em-none-eabihf
 ```
 
-Build:
+Build and lint:
 
 ```bash
 ./build b
-# or
-cargo build --release --target thumbv7em-none-eabihf
+./build c
 ```
 
-The release profile is optimized for size (`opt-level = 'z'`, LTO enabled).
+Direct Cargo commands also work because `.cargo/config.toml` sets the default embedded target:
+
+```bash
+cargo build --release --target thumbv7em-none-eabihf
+cargo clippy --release --target thumbv7em-none-eabihf
+```
+
+The release profile is optimized for size (`opt-level = 'z'`, LTO enabled). `build.rs` copies
+`memory.x` into Cargo's output directory and generates the USB device release constant from the
+package version.
 
 ## Flashing
 
@@ -83,14 +94,24 @@ or use the utility script:
 ## Development Notes
 
 - Run `./build c` before submitting changes to lint the release build.
+- Use `cargo outdated --root-deps-only` to check whether direct dependencies can be updated.
 - There is no host-side test suite yet; validate hardware-facing changes on a BlackPill board.
 - Contributor guidance lives in `AGENTS.md`. Agent-specific workflow notes live in `CLAUDE.md`.
 
 ## Dependencies
 
-- [RTIC v2](https://rtic.rs/) -- Real-Time Interrupt-driven Concurrency framework
-- [stm32f4xx-hal](https://github.com/stm32-rs/stm32f4xx-hal) -- Hardware abstraction layer
-- [usb-device](https://github.com/rust-embedded-community/usb-device) + [usbd-serial](https://github.com/rust-embedded-community/usbd-serial) -- USB CDC serial stack
+- [`rtic`](https://rtic.rs/) and [`rtic-monotonics`](https://github.com/rtic-rs/rtic) provide the
+  task runtime and TIM2 monotonic timer.
+- [`stm32f4xx-hal`](https://github.com/stm32-rs/stm32f4xx-hal) provides the STM32F411 hardware
+  abstraction layer.
+- [`usb-device`](https://github.com/rust-embedded-community/usb-device) and
+  [`usbd-serial`](https://github.com/rust-embedded-community/usbd-serial) provide the USB CDC serial
+  stack.
+- [`cortex-m`](https://github.com/rust-embedded/cortex-m),
+  [`heapless`](https://github.com/rust-embedded/heapless), [`itoa`](https://github.com/dtolnay/itoa),
+  and [`panic-halt`](https://github.com/korken89/panic-halt) cover core embedded support,
+  fixed-capacity strings, integer formatting, and panic behavior.
+- [`anyhow`](https://github.com/dtolnay/anyhow) is used by the build script.
 
 ## License
 

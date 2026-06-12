@@ -11,13 +11,19 @@ Use the helper script for the standard workflow:
 - `./build f`: flash with `cargo flash` for `STM32F411CEUx`.
 - `./build d`: create `target/out.bin` and flash via `dfu-util`.
 
-Direct Cargo commands also work, for example `cargo build --release --target thumbv7em-none-eabihf`. Install the target first with `rustup target add thumbv7em-none-eabihf`.
+Direct Cargo commands also work, for example `cargo build --release --target thumbv7em-none-eabihf`.
+Install the target first with `rustup target add thumbv7em-none-eabihf`. Use
+`cargo outdated --root-deps-only` when checking whether direct dependencies can be updated; treat
+transitive-only lockfile movement separately from `Cargo.toml` dependency changes.
 
 ## Coding Style & Naming Conventions
 Follow `rustfmt.toml`: 120-column width, grouped imports, and crate-granularity import merging. Use standard Rust naming: `snake_case` for functions and locals, `SCREAMING_SNAKE_CASE` for constants, and `CamelCase` for types and enums. This crate is `#![no_std]`; prefer predictable control flow, explicit hardware intent, and small helper types over allocation-heavy abstractions.
 
 ## Testing Guidelines
-There is no host-side test suite yet. Before opening a PR, run `./build b` and `./build c`. For behavior changes, include hardware validation notes covering USB CDC enumeration, 4-byte command parsing, PWM output on PA0-PA3, and any watchdog or startup-animation impact.
+There is no host-side test suite yet. Before opening a PR, run `./build b` and `./build c`. For
+behavior changes, include hardware validation notes covering USB CDC enumeration, 4-byte command
+parsing, PWM output on PA0-PA3, and any watchdog or startup-animation impact. `build.rs` derives
+the USB device release value from the crate version, so version bumps can affect USB descriptors.
 
 ## Commit & Pull Request Guidelines
 Recent history uses short, imperative commit subjects such as `cargo update`. Keep commits narrowly scoped and describe one logical change each. Pull requests should include a short summary, affected hardware behavior, commands run, and any manual flashing or bench-test results. Link related issues when available and call out changes to `memory.x`, USB identifiers, or flashing steps explicitly.
