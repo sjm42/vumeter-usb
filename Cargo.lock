@@ -400,9 +400,9 @@ dependencies = [
 
 [[package]]
 name = "rtic-monotonics"
-version = "2.1.0"
+version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99f9923ce32637ee40c0cb28fbbc2fad880d8aebea2d545918c6971ae9be3d17"
+checksum = "d12a5e827e4a491affc0296b7c33242f03c02ef70150f93912cc9c77bb071f65"
 dependencies = [
  "cfg-if",
  "cortex-m",
@@ -460,9 +460,9 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "stm32-metapac"
-version = "15.0.0"
+version = "21.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "deabea56a8821dcea05d0109f3ab3135f31eb572444e5da203d06149c594c8c6"
+checksum = "e74b78632cea498cfb28386a29f8bfae7476d6570a78733eb5fecbee66c2f4ce"
 dependencies = [
  "cortex-m",
 ]
