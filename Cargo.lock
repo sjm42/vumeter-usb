@@ -372,9 +372,9 @@ checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 
 [[package]]
 name = "rtic"
-version = "2.3.1"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fcca55b609067988553c8d9fbbef414b7dde1b2f7ca86e0956a130543270f7b"
+checksum = "373a07d594255d32df5bf7d140c51cf215082aacf29665d7b6a0e318c321853d"
 dependencies = [
  "cortex-m",
  "critical-section",
@@ -385,9 +385,9 @@ dependencies = [
 
 [[package]]
 name = "rtic-common"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67caeecca87cb20e1101eb104b0f05604633b7ab1035cce777417c6fb7c8f9a0"
+checksum = "dc8f0cd269e918a4d7791f8b9fda8a6c8bd96b657e125eada6e2d5d51bd8120b"
 dependencies = [
  "critical-section",
  "portable-atomic",
@@ -401,9 +401,9 @@ checksum = "d9369355b04d06a3780ec0f51ea2d225624db777acbc60abd8ca4832da5c1a42"
 
 [[package]]
 name = "rtic-macros"
-version = "2.3.1"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f18281c915f0acd59f369c93b0cfa9db7013ed12575bec052b644099ade4872c"
+checksum = "60ff622649d3c9ffb692a9aa13d1d54fb88923ea43dcf12c09af3371b054f92b"
 dependencies = [
  "indexmap",
  "proc-macro2",
