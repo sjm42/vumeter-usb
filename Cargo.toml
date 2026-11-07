@@ -5,22 +5,25 @@ authors = ["Sami J. Mäkinen <sjm@iki.fi>"]
 edition = "2024"
 readme = "README.md"
 name = "vumeter_usb"
-version = "1.0.4"
+version = "1.1.0"
 
+[workspace]
+members = ["tests/host"]
+default-members = ["."]
+resolver = "3"
 
 [dependencies]
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7"
 heapless =  "0.9"
-itoa = "1"
-panic-halt = "1"
-rtic = { version = "2.2", features = ["thumbv7-backend"] }
-rtic-monotonics = { version = "2", features = ["stm32f411ce", "stm32_tim2"] }
+rtic = { version = "2.4", features = ["thumbv7-backend"] }
+rtic-monotonics = { version = "2.2", features = ["stm32f411ce", "stm32_tim2"] }
 stm32f4xx-hal = { version = "0.23", features = ["stm32f411", "usb_fs"] }
 usb-device = "0.3"
 usbd-serial = "0.2"
 
 [build-dependencies]
-anyhow = "1"
+anyhow = "1.0"
 
 
 # this lets you use `cargo fix`!

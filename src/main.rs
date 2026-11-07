@@ -1,109 +1,129 @@
-// main.rs
-
 #![no_std]
 #![no_main]
 
-#[allow(unused_imports)]
-#[allow(clippy::single_component_path_imports)]
-use panic_halt;
+mod control;
+mod usb;
 
-use stm32f4xx_hal as hal;
+use core::{fmt::Write, panic::PanicInfo};
 
 use cortex_m::asm;
 use hal::{
-    gpio::*,
-    otg_fs::{USB, UsbBus},
+    gpio::{ErasedPin, Output, PushPull},
+    otg_fs::{USB, UsbBusType},
     pac::TIM5,
     prelude::*,
-    timer::*,
+    timer::ErasedChannel,
     watchdog::IndependentWatchdog,
 };
 use heapless::String;
 use rtic_monotonics::stm32::prelude::*;
+use stm32f4xx_hal as hal;
 use usb_device::{class_prelude::UsbBusAllocator, prelude::*};
 use usbd_serial::SerialPort;
 
+use crate::control::{Controller, PWM_NCHAN};
+
 stm32_tim2_monotonic!(Mono, 1_000_000);
 
-const HSE_MHZ: u32 = 25; // external crystal freq
-const SYS_MHZ: u32 = 84; // cpu target freq
-
-const CH_OFFSET: u8 = 0x30;
-const PWM_NCHAN: u8 = 4;
-
+const HSE_MHZ: u32 = 25;
+const SYS_MHZ: u32 = 84;
 const USB_VID: u16 = 0x16c0;
 const USB_PID: u16 = 0x27dd;
-
 const SER_NUM_LEN: usize = 32;
 
 include!(concat!(env!("OUT_DIR"), "/usb_device_release.rs"));
 
-// Make USB serial device globally available
-static mut G_USB_SERIAL: Option<SerialPort<UsbBus<USB>>> = None;
-
-// Make USB device globally available
-static mut G_USB_DEVICE: Option<UsbDevice<UsbBus<USB>>> = None;
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum CmdState {
-    Start1 = 0xFD,
-    Start2 = 0x02,
-    Chan,
-    Data,
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
+    fault_reset()
 }
 
-pub struct MyPwm {
+#[cortex_m_rt::exception(trampoline = false)]
+unsafe fn HardFault() -> ! {
+    fault_reset()
+}
+
+#[cortex_m_rt::exception]
+unsafe fn DefaultHandler(_irq: i16) {
+    fault_reset()
+}
+
+fn fault_reset() -> ! {
+    cortex_m::interrupt::disable();
+    // SAFETY: fault recovery never returns and all maskable interrupts are disabled.
+    // Only TIM5's compare registers are touched, restoring the normal minimum duty.
+    // Writes before TIM5 is clocked are harmless; reset subsequently initializes it.
+    let timer = unsafe { &*TIM5::ptr() };
+    for ccr in timer.ccr_iter() {
+        ccr.write(|w| w.ccr().set(1));
+    }
+    cortex_m::peripheral::SCB::sys_reset()
+}
+
+struct Pwm {
     max: u16,
-    pwm: [ErasedChannel<TIM5>; 4],
+    channels: [ErasedChannel<TIM5>; PWM_NCHAN],
+    applied: [u8; PWM_NCHAN],
 }
-impl MyPwm {
-    pub fn set_duty(&mut self, ch: u8, value: u8) {
-        if let 0..=3 = ch {
-            let d = (((value as u32 * self.max as u32) / 256u32) as u16).max(1);
-            self.pwm[ch as usize].set_duty(d);
+
+impl Pwm {
+    fn apply(&mut self, duties: &[u8; PWM_NCHAN]) {
+        for (index, &value) in duties.iter().enumerate() {
+            if value != self.applied[index] {
+                // Preserve the original scaling, including the nonzero minimum.
+                let duty = ((u32::from(value) * u32::from(self.max) / 256) as u16).max(1);
+                self.channels[index].set_duty(duty);
+                self.applied[index] = value;
+            }
         }
     }
 }
 
-#[rtic::app(
-    device = stm32f4xx_hal::pac,
-    peripherals = true,
-    dispatchers = [DMA2_STREAM4, DMA2_STREAM5, DMA2_STREAM6, DMA2_STREAM7]
-)]
+#[rtic::app(device = stm32f4xx_hal::pac, peripherals = true, dispatchers = [DMA2_STREAM4])]
 mod app {
     use super::*;
-    use core::fmt::Write;
 
     #[shared]
-    struct Shared {
-        led: ErasedPin<Output<PushPull>>,
-    }
+    struct Shared {}
 
     #[local]
     struct Local {
         watchdog: IndependentWatchdog,
-        pwm: crate::MyPwm,
-        state: CmdState,
-        chan: u8,
+        pwm: Pwm,
+        led: ErasedPin<Output<PushPull>>,
+        usb_device: UsbDevice<'static, UsbBusType>,
+        serial: SerialPort<'static, UsbBusType>,
+        control: Controller,
     }
 
-    #[init]
+    #[init(local = [
+        ep_memory: [u32; 1024] = [0; 1024],
+        usb_bus: Option<UsbBusAllocator<UsbBusType>> = None,
+        serial_number: String<SER_NUM_LEN> = String::new(),
+    ])]
     fn init(ctx: init::Context) -> (Shared, Local) {
-        static mut EP_MEMORY: [u32; 1024] = [0; 1024];
-        static mut USB_BUS: Option<UsbBusAllocator<stm32f4xx_hal::otg_fs::UsbBusType>> = None;
-        static mut SER_NUM: String<SER_NUM_LEN> = String::new();
+        let dp = ctx.device;
+        let reset = dp.RCC.csr().read();
+        let fault_boot = reset.sftrstf().bit_is_set() || reset.wdgrstf().bit_is_set() || reset.wwdgrstf().bit_is_set();
+        dp.RCC.csr().modify(|_, w| w.rmvf().set_bit());
+
+        // Cover initialization failures as well as failures in the service task.
+        let mut watchdog = IndependentWatchdog::new(dp.IWDG);
+        watchdog.start(5000u32.millis());
 
         let uid = hal::signature::Uid::get();
-        let mut s = itoa::Buffer::new();
-        let ser_num = unsafe { &mut *core::ptr::addr_of_mut!(SER_NUM) };
-        ser_num.write_str(uid.lot_num()).ok();
-        ser_num.write_str("-").ok();
-        ser_num.write_str(s.format(uid.x())).ok();
-        ser_num.write_str("-").ok();
-        ser_num.write_str(s.format(uid.y())).ok();
+        let serial_number = ctx.local.serial_number;
+        // At most 23 bytes: 7 lot characters, wafer number, X/Y and separators.
+        write!(
+            serial_number,
+            "{}-{}-{}-{}",
+            uid.lot_num(),
+            uid.waf_num(),
+            uid.x(),
+            uid.y()
+        )
+        .expect("USB serial number fits its buffer");
 
-        let dp = ctx.device;
         let mut rcc = dp.RCC.freeze(
             hal::rcc::Config::hse(HSE_MHZ.MHz())
                 .sysclk(SYS_MHZ.MHz())
@@ -111,29 +131,26 @@ mod app {
         );
         let gpioa = dp.GPIOA.split(&mut rcc);
         let gpioc = dp.GPIOC.split(&mut rcc);
-
-        // On Blackpill stm32f411 user led is on PC13, active low
         let mut led = gpioc.pc13.into_push_pull_output().erase();
-        led.set_low();
+        led.set_high();
 
-        Mono::start(SYS_MHZ * 1_000_000);
+        Mono::start(rcc.clocks.timclk1().raw());
 
-        let (_pwm_mgr, (c0, c1, c2, c3)) = dp.TIM5.pwm_hz(50.kHz(), &mut rcc);
-        let mut pwm_c = [
+        let (_manager, (c0, c1, c2, c3)) = dp.TIM5.pwm_hz(50.kHz(), &mut rcc);
+        let mut channels = [
             c0.with(gpioa.pa0).erase(),
             c1.with(gpioa.pa1).erase(),
             c2.with(gpioa.pa2).erase(),
             c3.with(gpioa.pa3).erase(),
         ];
-
-        for p in &mut pwm_c {
-            p.set_duty(1);
-            p.enable();
+        for channel in &mut channels {
+            channel.set_duty(1);
+            channel.enable();
         }
-
-        let pwm = MyPwm {
-            max: pwm_c[0].get_max_duty(),
-            pwm: pwm_c,
+        let pwm = Pwm {
+            max: channels[0].get_max_duty(),
+            channels,
+            applied: [0; PWM_NCHAN],
         };
 
         let usb = USB::new(
@@ -141,188 +158,64 @@ mod app {
             (gpioa.pa11, gpioa.pa12),
             &rcc.clocks,
         );
+        // RTIC gives init-local storage a unique 'static lifetime. The device and
+        // serial class then belong exclusively to the service task.
+        let bus = ctx.local.usb_bus.insert(UsbBusType::new(usb, ctx.local.ep_memory));
+        let serial = SerialPort::new(bus);
+        let usb_device = UsbDeviceBuilder::new(bus, UsbVidPid(USB_VID, USB_PID))
+            .device_class(usbd_serial::USB_CLASS_CDC)
+            .device_release(USB_DEVICE_RELEASE_BCD)
+            .strings(&[StringDescriptors::default()
+                .manufacturer("Siuro Hacklab")
+                .product("PWM Controller")
+                .serial_number(serial_number.as_str())])
+            .expect("one USB descriptor language fits")
+            .build();
 
-        unsafe {
-            let ep_mem = &mut *core::ptr::addr_of_mut!(EP_MEMORY);
-            let bus = core::ptr::addr_of_mut!(USB_BUS);
-            *bus = Some(stm32f4xx_hal::otg_fs::UsbBusType::new(usb, ep_mem));
-            let usb_bus = (*bus).as_ref().unwrap();
+        // Ensure Linux observes a disconnect even after a rapid fault reset or reflash.
+        let mut delay = ctx.core.SYST.delay(&rcc.clocks);
+        usb_device.bus().force_reset(&mut delay).expect("USB reconnect failed");
 
-            *core::ptr::addr_of_mut!(G_USB_SERIAL) = Some(SerialPort::new(usb_bus));
-            *core::ptr::addr_of_mut!(G_USB_DEVICE) = Some(
-                UsbDeviceBuilder::new(usb_bus, UsbVidPid(USB_VID, USB_PID))
-                    .device_class(usbd_serial::USB_CLASS_CDC)
-                    .device_release(USB_DEVICE_RELEASE_BCD)
-                    .strings(&[StringDescriptors::default()
-                        .manufacturer("Siuro Hacklab")
-                        .product("PWM Controller")
-                        .serial_number(ser_num.as_str())])
-                    .unwrap()
-                    .build(),
-            );
-        }
-
-        // Signal hello with pwm
-        hello::spawn().ok();
-
-        // feed the watchdog
-        periodic::spawn().ok();
-
-        // Start the hardware watchdog
-        let mut watchdog = IndependentWatchdog::new(dp.IWDG);
-        watchdog.start(5000u32.millis());
-
-        // testing
-        led.set_high();
-
+        service::spawn().expect("service starts once");
         (
-            Shared { led },
+            Shared {},
             Local {
                 watchdog,
                 pwm,
-                state: CmdState::Start1,
-                chan: 0,
+                led,
+                usb_device,
+                serial,
+                control: Controller::new(Mono::now().ticks() / 1000, !fault_boot),
             },
         )
     }
 
-    // Background task, runs whenever no other tasks are running
-    #[idle()]
+    #[idle]
     fn idle(_ctx: idle::Context) -> ! {
         loop {
             asm::wfe();
         }
     }
 
-    // Feed the watchdog to avoid hardware reset.
-    #[task(priority=2, local=[watchdog])]
-    async fn periodic(ctx: periodic::Context) {
+    // USB is polled every millisecond with a fixed receive budget. Buffered bytes
+    // left at the budget limit are serviced on the next tick, even without an IRQ.
+    #[task(priority = 2, local = [watchdog, pwm, led, usb_device, serial, control])]
+    async fn service(ctx: service::Context) {
         loop {
+            let now_ms = Mono::now().ticks() / 1000;
+            usb::service(ctx.local.usb_device, ctx.local.serial, ctx.local.control, now_ms)
+                .expect("USB receive failed");
+            ctx.local.control.tick(now_ms);
+            ctx.local.pwm.apply(ctx.local.control.duties());
+            if ctx.local.control.led_on(now_ms) {
+                ctx.local.led.set_low();
+            } else {
+                ctx.local.led.set_high();
+            }
+            // Feeding here proves that USB servicing, timeouts and PWM all ran.
+            // A quiet host is healthy and does not prevent feeding the watchdog.
             ctx.local.watchdog.feed();
-            Mono::delay(1000u64.millis()).await;
-        }
-    }
-
-    #[task(priority=1, shared=[led])]
-    async fn led_blink(ctx: led_blink::Context, ms: u64) {
-        let led_blink::SharedResources { mut led, .. } = ctx.shared;
-
-        (&mut led,).lock(|led| {
-            led.set_low();
-        });
-        led_off::spawn(ms).ok();
-    }
-
-    #[task(priority=1, shared=[led])]
-    async fn led_off(ctx: led_off::Context, ms: u64) {
-        Mono::delay(ms.millis()).await;
-
-        let led_off::SharedResources { mut led, .. } = ctx.shared;
-        (&mut led,).lock(|led| {
-            led.set_high();
-        });
-    }
-
-    #[task(priority=5, binds=OTG_FS, local=[state, chan])]
-    fn usb_fs(cx: usb_fs::Context) {
-        static mut USB_SERIAL: Option<SerialPort<UsbBus<USB>>> = None;
-        static mut USB_DEVICE: Option<UsbDevice<UsbBus<USB>>> = None;
-
-        let usb_dev = unsafe {
-            let dev = &mut *core::ptr::addr_of_mut!(USB_DEVICE);
-            dev.get_or_insert_with(|| {
-                // Move USB device here, leaving a None in its place
-                (*core::ptr::addr_of_mut!(G_USB_DEVICE)).take().unwrap()
-            })
-        };
-
-        let serial = unsafe {
-            let ser = &mut *core::ptr::addr_of_mut!(USB_SERIAL);
-            ser.get_or_insert_with(|| {
-                // Move USB serial device here, leaving a None in its place
-                (*core::ptr::addr_of_mut!(G_USB_SERIAL)).take().unwrap()
-            })
-        };
-
-        if !usb_dev.poll(&mut [serial]) {
-            return;
-        }
-
-        let usb_fs::LocalResources { state, chan, .. } = cx.local;
-
-        let mut buf = [0u8; 4];
-        if let Ok(count) = serial.read(&mut buf) {
-            if count < 1 {
-                return;
-            }
-            for c in buf[0..count].iter_mut() {
-                match *state {
-                    CmdState::Start1 => {
-                        if *c == CmdState::Start1 as u8 {
-                            *state = CmdState::Start2;
-                        }
-                    }
-                    CmdState::Start2 => {
-                        if *c == CmdState::Start2 as u8 {
-                            *state = CmdState::Chan;
-                        } else {
-                            *state = CmdState::Start1;
-                        }
-                    }
-                    CmdState::Chan => {
-                        // We cannot use TryInto trait here since we are no_std, sigh
-                        if *c >= CH_OFFSET && *c < CH_OFFSET + PWM_NCHAN {
-                            *state = CmdState::Data;
-                            *chan = *c - CH_OFFSET;
-                        } else {
-                            // Unknown Cmd
-                            *state = CmdState::Start1;
-                            *chan = 0x00;
-                        }
-                    }
-                    CmdState::Data => {
-                        // higher priority will execute immediately
-                        set_pwm::spawn(*chan, *c).ok();
-                        *state = CmdState::Start1;
-                    }
-                }
-            }
-        }
-    }
-
-    #[task(priority=7, local=[pwm])]
-    async fn set_pwm(cx: set_pwm::Context, ch: u8, da: u8) {
-        // we only support 4 channels here
-        if !(0..PWM_NCHAN).contains(&ch) {
-            return;
-        }
-        cx.local.pwm.set_duty(ch, da);
-        led_blink::spawn(10).ok();
-    }
-
-    const HELLO_MIN: u8 = 1;
-    const HELLO_MAX: u8 = 255;
-    const HELLO_DELAY: u64 = 100;
-
-    #[task(priority = 1)]
-    async fn hello(_cx: hello::Context) {
-        Mono::delay(2000u64.millis()).await;
-
-        for d in HELLO_MIN..=HELLO_MAX {
-            for ch in 0..PWM_NCHAN {
-                set_pwm::spawn(ch, d).ok();
-            }
-            Mono::delay(10u64.millis()).await;
-        }
-
-        Mono::delay(HELLO_DELAY.millis()).await;
-
-        for d in (HELLO_MIN..=HELLO_MAX).rev() {
-            for ch in 0..PWM_NCHAN {
-                set_pwm::spawn(ch, d).ok();
-            }
-            Mono::delay(10u64.millis()).await;
+            Mono::delay(1u64.millis()).await;
         }
     }
 }
-// EOF

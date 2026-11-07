@@ -4,8 +4,8 @@ set -e
 
 usage()
 {
-	echo "Usage: $0 b|c|f|d|n"
-	echo "  Operation: b = build, c = clippy, f = cargo flash, d = dfu flash"
+	echo "Usage: $0 b|c|t|f|d"
+	echo "  Operation: b = build, c = clippy, t = host tests, f = cargo flash, d = dfu flash"
     exit 1
 }
 
@@ -22,6 +22,11 @@ B*|b*)
 C*|c*)
     set -x
     cargo clippy $flags
+    ;;
+T*|t*)
+    host_tgt="$(rustc -vV | sed -n 's/^host: //p')"
+    set -x
+    cargo test -p vumeter-usb-tests --target "$host_tgt" --locked
     ;;
 F*|f*)
     set -x

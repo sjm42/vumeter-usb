@@ -14,15 +14,18 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
+#[path = "src/release.rs"]
+mod release;
+
 fn main() -> anyhow::Result<()> {
     // Put `memory.x` in our output directory and ensure it's
     // on the linker search path.
     let out = PathBuf::from(env::var_os("OUT_DIR").context("missing OUT_DIR")?);
-    let version: Vec<u16> = env::var("CARGO_PKG_VERSION")?
-        .split('.')
-        .map(str::parse::<u16>)
-        .collect::<Result<_, _>>()?;
-    let usb_device_release_bcd = ((version[0] / 10) << 12) | ((version[0] % 10) << 8) | (version[1] << 4) | version[2];
+    // Cargo supplies these separately, so prerelease/build suffixes are harmless.
+    let major = env::var("CARGO_PKG_VERSION_MAJOR")?.parse()?;
+    let minor = env::var("CARGO_PKG_VERSION_MINOR")?.parse()?;
+    let patch = env::var("CARGO_PKG_VERSION_PATCH")?.parse()?;
+    let usb_device_release_bcd = release::usb_device_release(major, minor, patch).map_err(anyhow::Error::msg)?;
 
     File::create(out.join("memory.x"))?.write_all(include_bytes!("memory.x"))?;
     File::create(out.join("usb_device_release.rs"))?
@@ -32,6 +35,7 @@ fn main() -> anyhow::Result<()> {
     // Rebuild if the linker script or package version changes.
     println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-changed=src/release.rs");
 
     Ok(())
 }

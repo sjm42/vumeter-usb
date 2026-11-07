@@ -1,0 +1,9 @@
+[package]
+name = "vumeter-usb-tests"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dev-dependencies]
+usb-device = "0.3"
+usbd-serial = "0.2"

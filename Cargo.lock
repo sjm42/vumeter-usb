@@ -284,12 +284,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "itoa"
-version = "1.0.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
-
-[[package]]
 name = "litrs"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -315,12 +309,6 @@ name = "num-conv"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521739c6d2bac4aa25192232afe6841231376b2b26d4d9fae5ecf8ca5772e441"
-
-[[package]]
-name = "panic-halt"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a513e167849a384b7f9b746e517604398518590a9142f4846a32e3c2a4de7b11"
 
 [[package]]
 name = "pin-project-lite"
@@ -623,14 +611,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "vumeter-usb-tests"
+version = "0.1.0"
+dependencies = [
+ "usb-device",
+ "usbd-serial",
+]
+
+[[package]]
 name = "vumeter_usb"
-version = "1.0.4"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "cortex-m",
+ "cortex-m-rt",
  "heapless 0.9.3",
- "itoa",
- "panic-halt",
  "rtic",
  "rtic-monotonics",
  "stm32f4xx-hal",
